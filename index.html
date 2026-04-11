@@ -1,6 +1,7 @@
+
 <!DOCTYPE html>
 <html lang="zh-CN">
-<head>
+<script src="https://lf-cdn.coze.cn/obj/unpkg/coze-space/page-editor-general-web/0.1.0-alpha.274555/dist/umd/index.js"></script><script src="https://lf-cdn.coze.cn/obj/unpkg/coze-webapp/console-bridge/0.0.1-alpha.b2eb33/dist/index.js"></script><script src="https://lf-cdn.coze.cn/obj/unpkg/coze-webapp/history-bridge/0.0.1-alpha.9e64d9/dist/index.min.js"></script><head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>英语单词学习助手</title>
@@ -10,6 +11,8 @@
     <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
     <!-- SheetJS -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <!-- Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     
     <script>
         tailwind.config = {
@@ -404,7 +407,12 @@
         <!-- 教师管理页 -->
         <section id="teacherPage" class="hidden">
             <div class="bg-white rounded-2xl shadow-xl p-8 mb-8 animate-fade-in">
-                <h2 class="text-2xl font-bold gradient-text mb-4">教师管理中心</h2>
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-2xl font-bold gradient-text">教师管理中心</h2>
+                    <button id="btnSyncFromCloud" class="px-4 py-2 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-xl hover:shadow-lg transition-all duration-300 font-medium flex items-center">
+                        <i class="fa fa-refresh mr-2"></i>刷新云端数据
+                    </button>
+                </div>
                 <p class="text-gray-600 mb-8">
                     在这里您可以上传单词本、管理单词、设置游戏组别，帮助学生更好地学习英语单词。
                 </p>
@@ -929,6 +937,230 @@
         let totalPairs = 0;
         let audioContext = null; // Web Audio API 上下文
 
+        // ========== Supabase 云同步配置 ==========
+        // Supabase 配置
+        const SUPABASE_URL = 'https://hcngkrxltpdckbihuycx.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhjbmdrcnhsdHBkY2tiaWh1eWN4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU5MDE1OTAsImV4cCI6MjA5MTQ3NzU5MH0.yhL-wFi_Deqm_mVXZd8DqlsNYcQ64hIV7o5AexZ87Dg';
+        
+        // 创建 Supabase 客户端
+        let supabase = null;
+        let isCloudEnabled = true; // 云同步开关
+        
+        // 初始化 Supabase
+        function initSupabase() {
+            if (typeof window.supabase !== 'undefined') {
+                supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+                console.log('Supabase 客户端已初始化，云同步已启用');
+                return true;
+            }
+            console.log('Supabase SDK 未加载，将使用本地存储');
+            isCloudEnabled = false;
+            return false;
+        }
+
+        // 从云端加载数据
+        async function loadFromCloud() {
+            if (!supabase || !isCloudEnabled) return null;
+            
+            try {
+                // 加载单词本
+                const { data: wordLists, error: wlError } = await supabase
+                    .from('word_lists')
+                    .select('*')
+                    .order('created_at', { ascending: true });
+                
+                if (wlError) throw wlError;
+                
+                // 加载单词
+                const { data: words, error: wError } = await supabase
+                    .from('words')
+                    .select('*')
+                    .order('created_at', { ascending: true });
+                
+                if (wError) throw wError;
+                
+                // 加载游戏组别
+                const { data: gameGroups, error: ggError } = await supabase
+                    .from('game_groups')
+                    .select('*')
+                    .order('created_at', { ascending: true });
+                
+                if (ggError) throw ggError;
+                
+                // 组合数据
+                const cloudData = {
+                    wordLists: wordLists || [],
+                    words: words || [],
+                    gameGroups: gameGroups || []
+                };
+                
+                console.log('从云端加载数据成功:', cloudData);
+                return cloudData;
+            } catch (error) {
+                console.error('从云端加载数据失败:', error);
+                showToast('云端加载失败，将使用本地数据', 'error');
+                return null;
+            }
+        }
+
+        // 保存单词本到云端
+        async function saveWordListToCloud(wordList) {
+            if (!supabase || !isCloudEnabled) return false;
+            
+            try {
+                // 先删除旧的单词本数据（级联删除单词）
+                await supabase
+                    .from('word_lists')
+                    .delete()
+                    .eq('id', wordList.id);
+                
+                // 保存单词本
+                const { error: wlError } = await supabase
+                    .from('word_lists')
+                    .insert({
+                        id: wordList.id,
+                        name: wordList.name,
+                        updated_at: new Date().toISOString()
+                    });
+                
+                if (wlError) throw wlError;
+                
+                // 保存单词
+                if (wordList.words && wordList.words.length > 0) {
+                    const wordsData = wordList.words.map(w => ({
+                        id: `w-${wordList.id}-${w.word}`,
+                        word_list_id: wordList.id,
+                        word: w.word,
+                        pos: w.pos,
+                        definition: w.definition,
+                        translation: w.translation,
+                        image_url: w.imageUrl || null,
+                        audio_url: w.audioUrl || null
+                    }));
+                    
+                    const { error: wError } = await supabase
+                        .from('words')
+                        .insert(wordsData);
+                    
+                    if (wError) throw wError;
+                }
+                
+                console.log('单词本已保存到云端');
+                return true;
+            } catch (error) {
+                console.error('保存单词本到云端失败:', error);
+                showToast('云端同步失败', 'error');
+                return false;
+            }
+        }
+
+        // 保存游戏组别到云端
+        async function saveGameGroupToCloud(gameGroup) {
+            if (!supabase || !isCloudEnabled) return false;
+            
+            try {
+                // 先删除旧的游戏组别
+                await supabase
+                    .from('game_groups')
+                    .delete()
+                    .eq('id', gameGroup.id);
+                
+                // 保存游戏组别
+                const { error } = await supabase
+                    .from('game_groups')
+                    .insert({
+                        id: gameGroup.id,
+                        name: gameGroup.name,
+                        word_list_id: gameGroup.wordListId,
+                        word_count: gameGroup.wordCount,
+                        enable_timer: gameGroup.enableTimer,
+                        advanced_mode: gameGroup.advancedMode,
+                        updated_at: new Date().toISOString()
+                    });
+                
+                if (error) throw error;
+                
+                console.log('游戏组别已保存到云端');
+                return true;
+            } catch (error) {
+                console.error('保存游戏组别到云端失败:', error);
+                return false;
+            }
+        }
+
+        // 从云端删除单词本
+        async function deleteWordListFromCloud(id) {
+            if (!supabase || !isCloudEnabled) return false;
+            
+            try {
+                const { error } = await supabase
+                    .from('word_lists')
+                    .delete()
+                    .eq('id', id);
+                
+                if (error) throw error;
+                console.log('单词本已从云端删除');
+                return true;
+            } catch (error) {
+                console.error('从云端删除单词本失败:', error);
+                return false;
+            }
+        }
+
+        // 从云端删除游戏组别
+        async function deleteGameGroupFromCloud(id) {
+            if (!supabase || !isCloudEnabled) return false;
+            
+            try {
+                const { error } = await supabase
+                    .from('game_groups')
+                    .delete()
+                    .eq('id', id);
+                
+                if (error) throw error;
+                console.log('游戏组别已从云端删除');
+                return true;
+            } catch (error) {
+                console.error('从云端删除游戏组别失败:', error);
+                return false;
+            }
+        }
+
+        // 将云端数据转换为本地格式
+        function convertCloudDataToLocal(cloudData) {
+            const localWordLists = [];
+            
+            (cloudData.wordLists || []).forEach(wl => {
+                const words = (cloudData.words || [])
+                    .filter(w => w.word_list_id === wl.id)
+                    .map(w => ({
+                        word: w.word,
+                        pos: w.pos,
+                        definition: w.definition,
+                        translation: w.translation,
+                        imageUrl: w.image_url,
+                        audioUrl: w.audio_url
+                    }));
+                
+                localWordLists.push({
+                    id: wl.id,
+                    name: wl.name,
+                    words: words
+                });
+            });
+            
+            const localGameGroups = (cloudData.gameGroups || []).map(gg => ({
+                id: gg.id,
+                name: gg.name,
+                wordListId: gg.word_list_id,
+                wordCount: gg.word_count,
+                enableTimer: gg.enable_timer,
+                advancedMode: gg.advanced_mode
+            }));
+            
+            return { localWordLists, localGameGroups };
+        }
+        
         // 初始化音频上下文（需要在用户交互后调用）
         function initAudioContext() {
             if (!audioContext) {
@@ -1049,27 +1281,67 @@
         };
 
         // DOM 加载完成后执行
-        document.addEventListener('DOMContentLoaded', function() {
-            initializeData();
+        document.addEventListener('DOMContentLoaded', async function() {
+            // 初始化 Supabase
+            initSupabase();
+            
+            // 初始化数据（尝试从云端加载）
+            await initializeData();
+            
             bindEvents();
             showPage('homePage');
         });
 
-        // 初始化数据
-        function initializeData() {
+        // 初始化数据（尝试从云端加载）
+        async function initializeData() {
+            // 先从本地加载
             let wordLists = JSON.parse(localStorage.getItem('wordLists')) || [];
             let gameGroups = JSON.parse(localStorage.getItem('gameGroups')) || [];
             localStorage.getItem('teacherPassword') || localStorage.setItem('teacherPassword', '123456');
             JSON.parse(localStorage.getItem('learningRecords')) || [];
             
+            // 尝试从云端加载
+            if (supabase && isCloudEnabled) {
+                try {
+                    const cloudData = await loadFromCloud();
+                    if (cloudData) {
+                        const { localWordLists, localGameGroups } = convertCloudDataToLocal(cloudData);
+                        
+                        // 如果云端有数据且比本地多，用云端数据覆盖本地
+                        if (localWordLists.length > 0) {
+                            wordLists = localWordLists;
+                            localStorage.setItem('wordLists', JSON.stringify(wordLists));
+                        }
+                        
+                        if (localGameGroups.length > 0) {
+                            gameGroups = localGameGroups;
+                            localStorage.setItem('gameGroups', JSON.stringify(gameGroups));
+                        }
+                        
+                        console.log('已同步云端数据到本地');
+                    }
+                } catch (error) {
+                    console.error('同步云端数据失败，使用本地数据:', error);
+                }
+            }
+            
+            // 如果本地和云端都没有数据，使用示例数据
             if (wordLists.length === 0) {
                 wordLists.push(sampleWordList);
                 localStorage.setItem('wordLists', JSON.stringify(wordLists));
+                // 同时保存到云端
+                if (supabase && isCloudEnabled) {
+                    await saveWordListToCloud(sampleWordList);
+                }
             }
             
             if (gameGroups.length === 0) {
                 gameGroups.push(sampleGameGroup);
                 localStorage.setItem('gameGroups', JSON.stringify(gameGroups));
+                // 同时保存到云端
+                if (supabase && isCloudEnabled) {
+                    await saveGameGroupToCloud(sampleGameGroup);
+                }
             }
             
             if (wordLists.length > 0) {
@@ -1094,6 +1366,7 @@
             // 教师页面按钮
             document.getElementById('btnDownloadTemplate').addEventListener('click', downloadTemplate);
             document.getElementById('btnUploadWords').addEventListener('click', () => document.getElementById('wordListFile').click());
+            document.getElementById('btnSyncFromCloud').addEventListener('click', syncFromCloud);
             document.getElementById('wordListFile').addEventListener('change', handleWordListUpload);
             document.getElementById('btnManageWordLists').addEventListener('click', showWordListManagement);
             document.getElementById('btnCloseWordListManagement').addEventListener('click', hideWordListManagement);
@@ -1239,6 +1512,38 @@
             }
         }
 
+        // 从云端刷新数据
+        async function syncFromCloud() {
+            const btn = document.getElementById('btnSyncFromCloud');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa fa-spinner fa-spin mr-2"></i>同步中...';
+            
+            try {
+                const cloudData = await loadFromCloud();
+                if (cloudData) {
+                    const { localWordLists, localGameGroups } = convertCloudDataToLocal(cloudData);
+                    
+                    // 更新本地存储
+                    localStorage.setItem('wordLists', JSON.stringify(localWordLists));
+                    localStorage.setItem('gameGroups', JSON.stringify(localGameGroups));
+                    
+                    if (localWordLists.length > 0) {
+                        currentWordList = localWordLists[0];
+                    }
+                    
+                    showToast('数据同步成功！', 'success');
+                } else {
+                    showToast('云端暂无数据或同步失败', 'info');
+                }
+            } catch (error) {
+                console.error('同步失败:', error);
+                showToast('同步失败，请检查网络连接', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fa fa-refresh mr-2"></i>刷新云端数据';
+            }
+        }
+
         // 下载Excel模板
         function downloadTemplate() {
             const wb = XLSX.utils.book_new();
@@ -1374,7 +1679,7 @@
         }
 
         // 保存单词本
-        function saveWordList() {
+        async function saveWordList() {
             const name = document.getElementById('wordListName').value.trim();
             if (!name) {
                 showToast('请输入单词本名称', 'error');
@@ -1393,7 +1698,18 @@
             localStorage.setItem('wordLists', JSON.stringify(wordLists));
             currentWordList = newWordList;
             hideWordListPreview();
-            showToast('单词本保存成功！', 'success');
+            
+            // 同时保存到云端
+            if (supabase && isCloudEnabled) {
+                const success = await saveWordListToCloud(newWordList);
+                if (success) {
+                    showToast('单词本保存成功，已同步到云端！', 'success');
+                } else {
+                    showToast('单词本已保存，但云端同步失败', 'error');
+                }
+            } else {
+                showToast('单词本保存成功！', 'success');
+            }
         }
 
         // 上传图片
@@ -1720,7 +2036,7 @@
         }
 
         // 保存编辑后的单词本
-        function saveEditedWordList() {
+        async function saveEditedWordList() {
             const id = localStorage.getItem('currentEditingWordListId');
             if (!id) return;
             
@@ -1764,12 +2080,23 @@
                 
                 hideWordListEditor();
                 showWordListManagement();
-                showToast('单词本更新成功！', 'success');
+                
+                // 同时保存到云端
+                if (supabase && isCloudEnabled) {
+                    const success = await saveWordListToCloud(wordLists[index]);
+                    if (success) {
+                        showToast('单词本更新成功，已同步到云端！', 'success');
+                    } else {
+                        showToast('单词本已更新，但云端同步失败', 'error');
+                    }
+                } else {
+                    showToast('单词本更新成功！', 'success');
+                }
             }
         }
 
         // 删除单词本
-        function deleteWordList(id) {
+        async function deleteWordList(id) {
             if (!confirm('确定要删除这个单词本吗？')) return;
             
             let wordLists = JSON.parse(localStorage.getItem('wordLists')) || [];
@@ -1778,6 +2105,11 @@
             
             if (currentWordList && currentWordList.id === id) {
                 currentWordList = wordLists.length > 0 ? wordLists[0] : null;
+            }
+            
+            // 同时从云端删除
+            if (supabase && isCloudEnabled) {
+                await deleteWordListFromCloud(id);
             }
             
             showWordListManagement();
@@ -1833,7 +2165,7 @@
         }
 
         // 保存游戏组别
-        function saveGameGroup() {
+        async function saveGameGroup() {
             const name = document.getElementById('gameGroupName').value.trim();
             if (!name) {
                 showToast('请输入游戏组别名称', 'error');
@@ -1869,7 +2201,18 @@
             localStorage.setItem('gameGroups', JSON.stringify(gameGroups));
             
             hideGameGroupCreator();
-            showToast('游戏组别创建成功！', 'success');
+            
+            // 同时保存到云端
+            if (supabase && isCloudEnabled) {
+                const success = await saveGameGroupToCloud(newGameGroup);
+                if (success) {
+                    showToast('游戏组别创建成功，已同步到云端！', 'success');
+                } else {
+                    showToast('游戏组别已创建，但云端同步失败', 'error');
+                }
+            } else {
+                showToast('游戏组别创建成功！', 'success');
+            }
         }
 
         // 显示游戏组别管理
@@ -1926,12 +2269,17 @@
         }
 
         // 删除游戏组别
-        function deleteGameGroup(id) {
+        async function deleteGameGroup(id) {
             if (!confirm('确定要删除这个游戏组别吗？')) return;
             
             let gameGroups = JSON.parse(localStorage.getItem('gameGroups')) || [];
             gameGroups = gameGroups.filter(gg => gg.id !== id);
             localStorage.setItem('gameGroups', JSON.stringify(gameGroups));
+            
+            // 同时从云端删除
+            if (supabase && isCloudEnabled) {
+                await deleteGameGroupFromCloud(id);
+            }
             
             showGameGroupManagement();
             showToast('游戏组别已删除', 'info');

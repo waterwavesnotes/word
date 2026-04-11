@@ -1,0 +1,2548 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>英语单词学习助手</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome -->
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <!-- SheetJS -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            50: '#eff6ff',
+                            100: '#dbeafe',
+                            200: '#bfdbfe',
+                            300: '#93c5fd',
+                            400: '#60a5fa',
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                            700: '#1d4ed8',
+                            800: '#1e40af',
+                            900: '#1e3a8a'
+                        },
+                        success: '#10b981',
+                        warning: '#f59e0b',
+                        danger: '#ef4444'
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif']
+                    },
+                    animation: {
+                        'bounce-in': 'bounceIn 0.5s ease-out',
+                        'fade-in': 'fadeIn 0.3s ease-out',
+                        'slide-up': 'slideUp 0.4s ease-out',
+                        'pulse-glow': 'pulseGlow 2s infinite',
+                        'shake': 'shake 0.5s ease-in-out',
+                        'pop': 'pop 0.3s ease-out'
+                    },
+                    keyframes: {
+                        bounceIn: {
+                            '0%': { transform: 'scale(0.3)', opacity: '0' },
+                            '50%': { transform: 'scale(1.05)' },
+                            '70%': { transform: 'scale(0.9)' },
+                            '100%': { transform: 'scale(1)', opacity: '1' }
+                        },
+                        fadeIn: {
+                            '0%': { opacity: '0' },
+                            '100%': { opacity: '1' }
+                        },
+                        slideUp: {
+                            '0%': { transform: 'translateY(20px)', opacity: '0' },
+                            '100%': { transform: 'translateY(0)', opacity: '1' }
+                        },
+                        pulseGlow: {
+                            '0%, 100%': { boxShadow: '0 0 5px rgba(59, 130, 246, 0.5)' },
+                            '50%': { boxShadow: '0 0 20px rgba(59, 130, 246, 0.8)' }
+                        },
+                        shake: {
+                            '0%, 100%': { transform: 'translateX(0)' },
+                            '10%, 30%, 50%, 70%, 90%': { transform: 'translateX(-5px)' },
+                            '20%, 40%, 60%, 80%': { transform: 'translateX(5px)' }
+                        },
+                        pop: {
+                            '0%': { transform: 'scale(1)' },
+                            '50%': { transform: 'scale(1.2)' },
+                            '100%': { transform: 'scale(1)' }
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .text-shadow {
+                text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+            }
+            .card-flip {
+                perspective: 1000px;
+            }
+            .card-inner {
+                transition: transform 0.6s;
+                transform-style: preserve-3d;
+            }
+            .card-front, .card-back {
+                backface-visibility: hidden;
+            }
+            .card-back {
+                transform: rotateY(180deg);
+            }
+            .flipped .card-inner {
+                transform: rotateY(180deg);
+            }
+            .vowel {
+                color: #ef4444;
+                font-weight: bold;
+            }
+            .syllable {
+                position: relative;
+                display: inline-block;
+                margin-right: 4px;
+            }
+            .syllable::after {
+                content: '-';
+                position: absolute;
+                right: -4px;
+                top: 0;
+            }
+            .syllable:last-child::after {
+                content: '';
+            }
+            
+            /* 消消乐卡片样式 */
+            .game-card {
+                perspective: 1000px;
+                cursor: pointer;
+                transition: all 0.3s ease;
+            }
+            .game-card-inner {
+                position: relative;
+                width: 100%;
+                height: 100%;
+                transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+                transform-style: preserve-3d;
+            }
+            .game-card.flipped .game-card-inner {
+                transform: rotateY(180deg);
+            }
+            .game-card-front, .game-card-back {
+                position: absolute;
+                width: 100%;
+                height: 100%;
+                backface-visibility: hidden;
+                border-radius: 0.75rem;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 0.75rem;
+            }
+            .game-card-front {
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                transform: rotateY(0deg);
+            }
+            .game-card-back {
+                background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+                color: white;
+                transform: rotateY(180deg);
+            }
+            .game-card.selected {
+                transform: scale(1.05);
+                z-index: 10;
+            }
+            .game-card.selected .game-card-front,
+            .game-card.selected .game-card-back {
+                box-shadow: 0 10px 25px rgba(59, 130, 246, 0.5);
+            }
+            .game-card.matched {
+                animation: matchedPulse 0.6s ease-out forwards;
+            }
+            .game-card.wrong {
+                animation: shake 0.5s ease-in-out;
+            }
+            @keyframes matchedPulse {
+                0% { transform: scale(1); opacity: 1; }
+                50% { transform: scale(1.1); opacity: 0.8; }
+                100% { transform: scale(0.8); opacity: 0; }
+            }
+            
+            .audio-wave {
+                display: inline-flex;
+                align-items: center;
+            }
+            .audio-wave span {
+                display: inline-block;
+                width: 3px;
+                height: 12px;
+                margin: 0 1px;
+                background-color: #3b82f6;
+                border-radius: 3px;
+                animation: wave 1s infinite ease-in-out;
+            }
+            .audio-wave span:nth-child(2) { animation-delay: 0.1s; }
+            .audio-wave span:nth-child(3) { animation-delay: 0.2s; }
+            .audio-wave span:nth-child(4) { animation-delay: 0.3s; }
+            @keyframes wave {
+                0%, 100% { height: 6px; }
+                50% { height: 12px; }
+            }
+            
+            /* Toast 提示样式 */
+            .toast {
+                position: fixed;
+                top: 20px;
+                left: 50%;
+                transform: translateX(-50%) translateY(-100px);
+                padding: 1rem 2rem;
+                border-radius: 0.75rem;
+                color: white;
+                font-weight: 600;
+                z-index: 9999;
+                opacity: 0;
+                transition: all 0.3s ease;
+                box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+            }
+            .toast.show {
+                transform: translateX(-50%) translateY(0);
+                opacity: 1;
+            }
+            .toast.success {
+                background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            }
+            .toast.error {
+                background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            }
+            .toast.info {
+                background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+            }
+            
+            /* 渐变背景 */
+            .gradient-bg {
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            }
+            .gradient-text {
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                background-clip: text;
+            }
+            
+            /* 玻璃态效果 */
+            .glass {
+                background: rgba(255, 255, 255, 0.95);
+                backdrop-filter: blur(10px);
+                -webkit-backdrop-filter: blur(10px);
+            }
+            
+            /* 浮动动画 */
+            .float-animation {
+                animation: float 3s ease-in-out infinite;
+            }
+            @keyframes float {
+                0%, 100% { transform: translateY(0px); }
+                50% { transform: translateY(-10px); }
+            }
+            
+            /* 进度条动画 */
+            .progress-bar {
+                transition: width 0.5s ease-out;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen font-sans text-gray-800">
+    <!-- Toast 提示容器 -->
+    <div id="toast" class="toast"></div>
+
+    <!-- 导航栏 -->
+    <nav class="gradient-bg text-white shadow-lg sticky top-0 z-50">
+        <div class="container mx-auto px-4 py-4">
+            <div class="flex justify-between items-center">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 bg-white rounded-full flex items-center justify-center float-animation">
+                        <i class="fa fa-book text-primary-500 text-xl"></i>
+                    </div>
+                    <h1 class="text-xl font-bold text-shadow">英语单词学习助手</h1>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <button id="btnHome" class="px-4 py-2 rounded-lg hover:bg-white/20 transition-all duration-300 flex items-center space-x-2">
+                        <i class="fa fa-home"></i>
+                        <span>首页</span>
+                    </button>
+                    <button id="btnTeacher" class="px-4 py-2 rounded-lg hover:bg-white/20 transition-all duration-300 flex items-center space-x-2">
+                        <i class="fa fa-user-circle"></i>
+                        <span>教师端</span>
+                    </button>
+                    <button id="btnStudent" class="px-4 py-2 rounded-lg hover:bg-white/20 transition-all duration-300 flex items-center space-x-2">
+                        <i class="fa fa-graduation-cap"></i>
+                        <span>学生端</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 主内容区 -->
+    <main class="container mx-auto px-4 py-8">
+        <!-- 首页 -->
+        <section id="homePage" class="block">
+            <div class="text-center mb-12 animate-fade-in">
+                <h2 class="text-4xl font-bold mb-4 gradient-text text-shadow">欢迎使用英语单词学习助手</h2>
+                <p class="text-lg text-gray-600 max-w-2xl mx-auto leading-relaxed">
+                    这是一个专为英语教师和学生设计的单词学习工具，提供单词闪卡和配对消消乐游戏，帮助学生轻松记忆英语单词。
+                </p>
+            </div>
+            
+            <div class="grid md:grid-cols-2 gap-8 max-w-5xl mx-auto">
+                <!-- 教师入口 -->
+                <div class="bg-white rounded-2xl shadow-xl p-8 transform transition-all duration-300 hover:scale-105 hover:shadow-2xl group">
+                    <div class="text-center mb-6">
+                        <div class="w-20 h-20 bg-gradient-to-br from-blue-400 to-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform duration-300 shadow-lg">
+                            <i class="fa fa-user-circle text-white text-4xl"></i>
+                        </div>
+                        <h3 class="text-2xl font-bold gradient-text">教师入口</h3>
+                    </div>
+                    <p class="text-gray-600 mb-6 text-center leading-relaxed">
+                        上传单词本、管理单词、设置游戏组别，帮助学生更好地学习英语单词。
+                    </p>
+                    <div class="text-center">
+                        <button id="enterTeacher" class="gradient-bg text-white px-8 py-3 rounded-xl hover:shadow-lg transition-all duration-300 transform hover:scale-105 font-semibold">
+                            进入教师端
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- 学生入口 -->
+                <div class="bg-white rounded-2xl shadow-xl p-8 transform transition-all duration-300 hover:scale-105 hover:shadow-2xl group">
+                    <div class="text-center mb-6">
+                        <div class="w-20 h-20 bg-gradient-to-br from-pink-400 to-pink-600 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform duration-300 shadow-lg">
+                            <i class="fa fa-graduation-cap text-white text-4xl"></i>
+                        </div>
+                        <h3 class="text-2xl font-bold gradient-text">学生入口</h3>
+                    </div>
+                    <p class="text-gray-600 mb-6 text-center leading-relaxed">
+                        使用单词闪卡学习单词，通过配对消消乐游戏巩固记忆，提高英语词汇量。
+                    </p>
+                    <div class="text-center">
+                        <button id="enterStudent" class="bg-gradient-to-r from-pink-500 to-pink-600 text-white px-8 py-3 rounded-xl hover:shadow-lg transition-all duration-300 transform hover:scale-105 font-semibold">
+                            进入学生端
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 功能特色 -->
+            <div class="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto mt-16">
+                <div class="bg-white rounded-xl p-6 shadow-lg text-center transform hover:-translate-y-2 transition-all duration-300">
+                    <div class="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i class="fa fa-clone text-blue-500 text-2xl"></i>
+                    </div>
+                    <h4 class="font-bold text-lg mb-2">单词闪卡</h4>
+                    <p class="text-gray-600 text-sm">支持发音朗读和音节划分，帮助记忆单词</p>
+                </div>
+                <div class="bg-white rounded-xl p-6 shadow-lg text-center transform hover:-translate-y-2 transition-all duration-300">
+                    <div class="w-16 h-16 bg-pink-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i class="fa fa-gamepad text-pink-500 text-2xl"></i>
+                    </div>
+                    <h4 class="font-bold text-lg mb-2">配对消消乐</h4>
+                    <p class="text-gray-600 text-sm">趣味游戏巩固单词记忆，学习更轻松</p>
+                </div>
+                <div class="bg-white rounded-xl p-6 shadow-lg text-center transform hover:-translate-y-2 transition-all duration-300">
+                    <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i class="fa fa-upload text-green-500 text-2xl"></i>
+                    </div>
+                    <h4 class="font-bold text-lg mb-2">自定义词库</h4>
+                    <p class="text-gray-600 text-sm">支持Excel导入，轻松管理单词本</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- 教师登录页 -->
+        <section id="teacherLoginPage" class="hidden">
+            <div class="max-w-md mx-auto">
+                <div class="bg-white rounded-2xl shadow-2xl p-8 animate-slide-up">
+                    <div class="text-center mb-6">
+                        <div class="w-16 h-16 gradient-bg rounded-full flex items-center justify-center mx-auto mb-4">
+                            <i class="fa fa-lock text-white text-2xl"></i>
+                        </div>
+                        <h2 class="text-2xl font-bold gradient-text">教师登录</h2>
+                        <p class="text-gray-500 mt-2">请输入密码以访问教师管理功能</p>
+                    </div>
+                    
+                    <form id="teacherLoginForm" class="space-y-5">
+                        <div>
+                            <label for="teacherPassword" class="block text-gray-700 mb-2 font-medium">密码</label>
+                            <input type="password" id="teacherPassword" class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-blue-500 transition-colors" placeholder="请输入密码">
+                        </div>
+                        
+                        <div class="text-center">
+                            <button type="submit" class="w-full gradient-bg text-white px-6 py-3 rounded-xl hover:shadow-lg transition-all duration-300 font-semibold">
+                                登录
+                            </button>
+                        </div>
+                    </form>
+                    
+                    <div class="mt-6 p-4 bg-blue-50 rounded-xl">
+                        <p class="text-sm text-blue-600 text-center">
+                            <i class="fa fa-info-circle mr-1"></i>
+                            默认密码：123456（可在教师设置中修改）
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 教师管理页 -->
+        <section id="teacherPage" class="hidden">
+            <div class="bg-white rounded-2xl shadow-xl p-8 mb-8 animate-fade-in">
+                <h2 class="text-2xl font-bold gradient-text mb-4">教师管理中心</h2>
+                <p class="text-gray-600 mb-8">
+                    在这里您可以上传单词本、管理单词、设置游戏组别，帮助学生更好地学习英语单词。
+                </p>
+                
+                <div class="grid md:grid-cols-2 gap-6">
+                    <!-- 单词本管理 -->
+                    <div class="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-6 border border-blue-200">
+                        <h3 class="text-xl font-bold text-blue-700 mb-4 flex items-center">
+                            <i class="fa fa-book mr-2"></i>单词本管理
+                        </h3>
+                        <div class="space-y-3">
+                            <button id="btnDownloadTemplate" class="w-full bg-white text-blue-600 px-4 py-3 rounded-xl hover:bg-blue-600 hover:text-white transition-all duration-300 flex items-center justify-center font-medium shadow-sm">
+                                <i class="fa fa-download mr-2"></i>下载Excel模板
+                            </button>
+                            <button id="btnUploadWords" class="w-full bg-white text-blue-600 px-4 py-3 rounded-xl hover:bg-blue-600 hover:text-white transition-all duration-300 flex items-center justify-center font-medium shadow-sm">
+                                <i class="fa fa-upload mr-2"></i>上传单词本
+                            </button>
+                            <input type="file" id="wordListFile" accept=".xlsx,.xls,.csv" class="hidden">
+                            <button id="btnManageWordLists" class="w-full bg-white text-blue-600 px-4 py-3 rounded-xl hover:bg-blue-600 hover:text-white transition-all duration-300 flex items-center justify-center font-medium shadow-sm">
+                                <i class="fa fa-list mr-2"></i>管理单词本
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- 消消乐设置 -->
+                    <div class="bg-gradient-to-br from-pink-50 to-pink-100 rounded-xl p-6 border border-pink-200">
+                        <h3 class="text-xl font-bold text-pink-700 mb-4 flex items-center">
+                            <i class="fa fa-gamepad mr-2"></i>消消乐游戏设置
+                        </h3>
+                        <div class="space-y-3">
+                            <button id="btnCreateGameGroup" class="w-full bg-white text-pink-600 px-4 py-3 rounded-xl hover:bg-pink-600 hover:text-white transition-all duration-300 flex items-center justify-center font-medium shadow-sm">
+                                <i class="fa fa-plus-circle mr-2"></i>创建游戏组别
+                            </button>
+                            <button id="btnManageGameGroups" class="w-full bg-white text-pink-600 px-4 py-3 rounded-xl hover:bg-pink-600 hover:text-white transition-all duration-300 flex items-center justify-center font-medium shadow-sm">
+                                <i class="fa fa-gamepad mr-2"></i>管理游戏组别
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mt-8">
+                    <h3 class="text-xl font-bold gradient-text mb-4 flex items-center">
+                        <i class="fa fa-cog mr-2"></i>教师设置
+                    </h3>
+                    <div class="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-6 border border-gray-200">
+                        <div class="flex flex-col md:flex-row md:items-end md:space-x-4 gap-4">
+                            <div class="flex-1">
+                                <label for="newPassword" class="block text-gray-700 mb-1 font-medium">修改密码</label>
+                                <input type="password" id="newPassword" class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-blue-500 transition-colors" placeholder="新密码">
+                            </div>
+                            <div class="flex-1">
+                                <label for="confirmPassword" class="block text-gray-700 mb-1 font-medium">确认密码</label>
+                                <input type="password" id="confirmPassword" class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-blue-500 transition-colors" placeholder="确认新密码">
+                            </div>
+                            <div class="flex-1">
+                                <button id="btnChangePassword" class="w-full gradient-bg text-white px-6 py-3 rounded-xl hover:shadow-lg transition-all duration-300 font-medium">
+                                    修改密码
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 单词本上传预览 -->
+            <div id="wordListPreview" class="hidden bg-white rounded-2xl shadow-xl p-8 mb-8 animate-slide-up">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-xl font-bold gradient-text">单词本预览</h3>
+                    <button id="btnClosePreview" class="text-gray-400 hover:text-gray-600 transition-colors text-2xl">
+                        <i class="fa fa-times"></i>
+                    </button>
+                </div>
+                
+                <div id="validationErrors" class="mb-6 hidden">
+                    <div class="bg-red-50 border-2 border-red-300 text-red-700 px-6 py-4 rounded-xl" role="alert">
+                        <strong class="font-bold flex items-center"><i class="fa fa-exclamation-circle mr-2"></i>上传错误：</strong>
+                        <div id="errorList" class="mt-2 pl-6"></div>
+                    </div>
+                </div>
+                
+                <div class="overflow-x-auto mb-6">
+                    <table class="min-w-full bg-white">
+                        <thead>
+                            <tr class="bg-gradient-to-r from-blue-500 to-pink-500 text-white">
+                                <th class="py-3 px-4 text-left text-sm font-semibold">单词</th>
+                                <th class="py-3 px-4 text-left text-sm font-semibold">词性</th>
+                                <th class="py-3 px-4 text-left text-sm font-semibold">英文释义</th>
+                                <th class="py-3 px-4 text-left text-sm font-semibold">中文释义</th>
+                                <th class="py-3 px-4 text-left text-sm font-semibold">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="wordListTableBody" class="divide-y divide-gray-200">
+                            <!-- 单词列表将在这里动态生成 -->
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div class="flex flex-col md:flex-row md:items-center md:space-x-4 gap-4">
+                    <div class="flex-1">
+                        <label for="wordListName" class="block text-gray-700 mb-1 font-medium">单词本名称</label>
+                        <input type="text" id="wordListName" class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-blue-500 transition-colors" placeholder="例如：第一单元单词">
+                    </div>
+                    <div class="flex space-x-3">
+                        <button id="btnSaveWordList" class="gradient-bg text-white px-6 py-3 rounded-xl hover:shadow-lg transition-all duration-300 font-medium">
+                            保存单词本
+                        </button>
+                        <button id="btnCancelUpload" class="bg-gray-300 text-gray-700 px-6 py-3 rounded-xl hover:bg-gray-400 transition-colors font-medium">
+                            取消
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 单词本管理 -->
+            <div id="wordListManagement" class="hidden bg-white rounded-2xl shadow-xl p-8 mb-8 animate-slide-up">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-xl font-bold gradient-text">单词本管理</h3>
+                    <button id="btnCloseWordListManagement" class="text-gray-400 hover:text-gray-600 transition-colors text-2xl">
+                        <i class="fa fa-times"></i>
+                    </button>
+                </div>
+                
+                <div id="wordListContainer" class="space-y-4">
+                    <!-- 单词本列表将在这里动态生成 -->
+                </div>
+            </div>
+            
+            <!-- 单词本编辑 -->
+            <div id="wordListEditor" class="hidden bg-white rounded-2xl shadow-xl p-8 mb-8 animate-slide-up">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-xl font-bold gradient-text">编辑单词本</h3>
+                    <button id="btnCloseEditor" class="text-gray-400 hover:text-gray-600 transition-colors text-2xl">
+                        <i class="fa fa-times"></i>
+                    </button>
+                </div>
+                
+                <div class="mb-6">
+                    <label for="editWordListName" class="block text-gray-700 mb-2 font-medium">单词本名称</label>
+                    <input type="text" id="editWordListName" class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-blue-500 transition-colors">
+                </div>
+                
+                <div id="editWordListContainer" class="space-y-4 mb-6 max-h-96 overflow-y-auto pr-2">
+                    <!-- 单词编辑表单将在这里动态生成 -->
+                </div>
+                
+                <div class="flex space-x-4">
+                    <button id="btnSaveEditedWordList" class="flex-1 gradient-bg text-white px-6 py-3 rounded-xl hover:shadow-lg transition-all duration-300 font-medium">
+                        保存修改
+                    </button>
+                    <button id="btnAddWord" class="flex-1 bg-gradient-to-r from-pink-500 to-pink-600 text-white px-6 py-3 rounded-xl hover:shadow-lg transition-all duration-300 font-medium">
+                        添加单词
+                    </button>
+                </div>
+            </div>
+            
+            <!-- 游戏组别创建 -->
+            <div id="gameGroupCreator" class="hidden bg-white rounded-2xl shadow-xl p-8 mb-8 animate-slide-up">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-xl font-bold gradient-text">创建游戏组别</h3>
+                    <button id="btnCloseGameGroupCreator" class="text-gray-400 hover:text-gray-600 transition-colors text-2xl">
+                        <i class="fa fa-times"></i>
+                    </button>
+                </div>
+                
+                <div class="space-y-5">
+                    <div>
+                        <label for="gameGroupName" class="block text-gray-700 mb-2 font-medium">游戏组别名称</label>
+                        <input type="text" id="gameGroupName" class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-blue-500 transition-colors" placeholder="例如：第一单元基础组">
+                    </div>
+                    
+                    <div>
+                        <label for="selectWordList" class="block text-gray-700 mb-2 font-medium">选择单词本</label>
+                        <select id="selectWordList" class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-blue-500 transition-colors bg-white">
+                            <!-- 单词本选项将在这里动态生成 -->
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <label for="wordCount" class="block text-gray-700 mb-2 font-medium">单词数量</label>
+                        <input type="number" id="wordCount" class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-blue-500 transition-colors" min="3" max="20" value="10">
+                        <p class="text-sm text-gray-500 mt-1 flex items-center">
+                            <i class="fa fa-info-circle mr-1"></i>
+                            请设置3-20个单词
+                        </p>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-gray-700 mb-3 font-medium">游戏设置</label>
+                        <div class="flex items-center space-x-6">
+                            <label class="flex items-center cursor-pointer">
+                                <input type="checkbox" id="enableTimer" class="w-5 h-5 text-blue-600 rounded mr-2" checked>
+                                <span>启用计时</span>
+                            </label>
+                            <label class="flex items-center cursor-pointer">
+                                <input type="checkbox" id="advancedMode" class="w-5 h-5 text-blue-600 rounded mr-2">
+                                <span>进阶模式</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="flex space-x-4 mt-6">
+                    <button id="btnSaveGameGroup" class="flex-1 gradient-bg text-white px-6 py-3 rounded-xl hover:shadow-lg transition-all duration-300 font-medium">
+                        创建游戏组别
+                    </button>
+                    <button id="btnCancelGameGroup" class="flex-1 bg-gray-300 text-gray-700 px-6 py-3 rounded-xl hover:bg-gray-400 transition-colors font-medium">
+                        取消
+                    </button>
+                </div>
+            </div>
+            
+            <!-- 游戏组别管理 -->
+            <div id="gameGroupManagement" class="hidden bg-white rounded-2xl shadow-xl p-8 mb-8 animate-slide-up">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-xl font-bold gradient-text">游戏组别管理</h3>
+                    <button id="btnCloseGameGroupManagement" class="text-gray-400 hover:text-gray-600 transition-colors text-2xl">
+                        <i class="fa fa-times"></i>
+                    </button>
+                </div>
+                
+                <div id="gameGroupContainer" class="space-y-4">
+                    <!-- 游戏组别列表将在这里动态生成 -->
+                </div>
+            </div>
+        </section>
+
+        <!-- 学生学习页 -->
+        <section id="studentPage" class="hidden">
+            <div class="text-center mb-10 animate-fade-in">
+                <h2 class="text-3xl font-bold gradient-text mb-3">学生学习中心</h2>
+                <p class="text-gray-600">选择下面的学习模块开始学习英语单词</p>
+            </div>
+            
+            <div class="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+                <!-- 单词闪卡 -->
+                <div class="bg-white rounded-2xl shadow-xl p-8 transform transition-all duration-300 hover:scale-105 hover:shadow-2xl group">
+                    <div class="text-center mb-6">
+                        <div class="w-20 h-20 bg-gradient-to-br from-blue-400 to-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform duration-300 shadow-lg">
+                            <i class="fa fa-clone text-white text-4xl"></i>
+                        </div>
+                        <h3 class="text-2xl font-bold gradient-text">单词闪卡</h3>
+                    </div>
+                    <p class="text-gray-600 mb-6 text-center">
+                        使用单词闪卡学习英语单词，支持发音、音节划分，帮助记忆单词。
+                    </p>
+                    <div class="text-center">
+                        <button id="enterFlashcards" class="gradient-bg text-white px-8 py-3 rounded-xl hover:shadow-lg transition-all duration-300 transform hover:scale-105 font-semibold">
+                            开始学习
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- 单词配对消消乐 -->
+                <div class="bg-white rounded-2xl shadow-xl p-8 transform transition-all duration-300 hover:scale-105 hover:shadow-2xl group">
+                    <div class="text-center mb-6">
+                        <div class="w-20 h-20 bg-gradient-to-br from-pink-400 to-pink-600 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform duration-300 shadow-lg">
+                            <i class="fa fa-gamepad text-white text-4xl"></i>
+                        </div>
+                        <h3 class="text-2xl font-bold gradient-text">单词配对消消乐</h3>
+                    </div>
+                    <p class="text-gray-600 mb-6 text-center">
+                        通过有趣的配对游戏巩固单词记忆，提高学习效率。
+                    </p>
+                    <div class="text-center">
+                        <button id="enterMatchingGame" class="bg-gradient-to-r from-pink-500 to-pink-600 text-white px-8 py-3 rounded-xl hover:shadow-lg transition-all duration-300 transform hover:scale-105 font-semibold">
+                            开始游戏
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 学习记录 -->
+            <div class="max-w-4xl mx-auto mt-10">
+                <div class="bg-white rounded-2xl shadow-xl p-8">
+                    <h3 class="text-xl font-bold gradient-text mb-6 flex items-center">
+                        <i class="fa fa-history mr-2"></i>学习记录
+                    </h3>
+                    <div id="learningRecords" class="space-y-4">
+                        <!-- 学习记录将在这里动态生成 -->
+                        <p class="text-gray-500 text-center py-8">暂无学习记录</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 单词闪卡学习页 -->
+        <section id="flashcardsPage" class="hidden">
+            <div class="max-w-4xl mx-auto">
+                <div class="bg-white rounded-2xl shadow-xl p-8 mb-6">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-2xl font-bold gradient-text">单词闪卡学习</h2>
+                        <button id="btnBackToStudent" class="text-gray-500 hover:text-gray-700 transition-colors flex items-center">
+                            <i class="fa fa-arrow-left mr-2"></i> 返回
+                        </button>
+                    </div>
+                    
+                    <div class="mb-5">
+                        <label for="selectFlashcardWordList" class="block text-gray-700 mb-2 font-medium">选择单词本</label>
+                        <select id="selectFlashcardWordList" class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-blue-500 transition-colors bg-white">
+                            <!-- 单词本选项将在这里动态生成 -->
+                        </select>
+                    </div>
+                    
+                    <div class="mb-6 flex flex-wrap justify-between items-center gap-4">
+                        <div class="flex items-center gap-2">
+                            <button id="btnToggleAutoPlay" class="px-5 py-2 gradient-bg text-white rounded-xl hover:shadow-lg transition-all duration-300 flex items-center font-medium">
+                                <i class="fa fa-play mr-2"></i> 自动播放
+                            </button>
+                            <button id="btnToggleFavorite" class="px-5 py-2 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 transition-colors flex items-center font-medium">
+                                <i class="fa fa-star-o mr-2"></i> 收藏
+                            </button>
+                        </div>
+                        <button id="btnPlayAudio" class="px-5 py-2 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-xl hover:shadow-lg transition-all duration-300 flex items-center font-medium">
+                            <i class="fa fa-volume-up mr-2"></i> 发音
+                        </button>
+                    </div>
+                    
+                    <div class="auto-play-controls hidden mb-5 p-4 bg-blue-50 rounded-xl">
+                        <div class="flex items-center space-x-4">
+                            <label for="autoPlaySpeed" class="text-gray-700 font-medium">翻页速度：</label>
+                            <select id="autoPlaySpeed" class="px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 bg-white">
+                                <option value="3000">3秒</option>
+                                <option value="5000" selected>5秒</option>
+                                <option value="10000">10秒</option>
+                            </select>
+                            <button id="btnPauseAutoPlay" class="px-4 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg hover:shadow transition-colors flex items-center font-medium">
+                                <i class="fa fa-pause mr-2"></i> 暂停
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="flex justify-center mb-6">
+                        <div class="relative w-full max-w-md">
+                            <!-- 左右切换箭头 -->
+                            <button id="btnPrevCard" class="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-4 z-10 w-12 h-12 gradient-bg text-white rounded-full flex items-center justify-center hover:shadow-lg transition-all duration-300">
+                                <i class="fa fa-chevron-left text-xl"></i>
+                            </button>
+                            
+                            <div id="flashcard" class="card-flip w-full h-96 cursor-pointer">
+                                <div class="card-inner relative w-full h-full">
+                                    <!-- 卡片正面 -->
+                                    <div class="card-front absolute w-full h-full bg-white rounded-2xl shadow-lg flex flex-col items-center justify-center p-6 border-3 border-blue-200">
+                                        <div id="cardImage" class="w-48 h-48 bg-gradient-to-br from-blue-50 to-pink-50 rounded-xl mb-6 flex items-center justify-center overflow-hidden">
+                                            <i class="fa fa-image text-gray-300 text-5xl"></i>
+                                        </div>
+                                        <h3 id="cardWord" class="text-5xl font-bold mb-4 text-center gradient-text">apple</h3>
+                                        <button id="cardPlayAudio" class="w-14 h-14 gradient-bg text-white rounded-full flex items-center justify-center hover:shadow-lg transition-all duration-300 hover:scale-110">
+                                            <i class="fa fa-volume-up text-xl"></i>
+                                        </button>
+                                    </div>
+                                    
+                                    <!-- 卡片背面 -->
+                                    <div class="card-back absolute w-full h-full bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl shadow-lg flex flex-col items-center justify-center p-6 border-3 border-pink-200">
+                                        <h3 id="cardWordBack" class="text-4xl font-bold mb-3 text-center text-gray-800">apple</h3>
+                                        <div id="cardSyllables" class="text-2xl mb-4 text-center text-pink-500 font-medium">
+                                            <span class="syllable">ap</span><span class="syllable">ple</span>
+                                        </div>
+                                        <p id="cardPos" class="text-lg mb-2 italic text-center text-gray-600">n.</p>
+                                        <p id="cardDefinition" class="text-gray-500 mb-3 text-center text-sm px-4">a round fruit with smooth skin and crisp flesh</p>
+                                        <p id="cardTranslation" class="text-2xl text-pink-600 font-bold text-center">苹果</p>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <button id="btnNextCard" class="absolute right-0 top-1/2 -translate-y-1/2 translate-x-4 z-10 w-12 h-12 gradient-bg text-white rounded-full flex items-center justify-center hover:shadow-lg transition-all duration-300">
+                                <i class="fa fa-chevron-right text-xl"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-6">
+                        <div class="flex justify-between items-center mb-3">
+                            <div id="cardCounter" class="text-gray-600 font-medium">
+                                单词 1 / 10
+                            </div>
+                            <div class="text-sm text-gray-500">
+                                <i class="fa fa-hand-pointer-o mr-1"></i>点击卡片翻转查看释义
+                            </div>
+                        </div>
+                        <div id="wordNavigation" class="flex flex-wrap gap-2 justify-center">
+                            <!-- 单词序号将在这里动态生成 -->
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 收藏单词列表 -->
+                <div id="favoriteWordsSection" class="bg-white rounded-2xl shadow-xl p-8 mb-6 hidden">
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 class="text-xl font-bold gradient-text flex items-center">
+                            <i class="fa fa-star text-yellow-400 mr-2"></i>收藏的单词
+                        </h3>
+                        <button id="btnCloseFavorites" class="text-gray-400 hover:text-gray-600 transition-colors text-xl">
+                            <i class="fa fa-times"></i>
+                        </button>
+                    </div>
+                    
+                    <div id="favoriteWordsList" class="space-y-3">
+                        <!-- 收藏单词列表将在这里动态生成 -->
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 单词配对消消乐游戏页 -->
+        <section id="matchingGamePage" class="hidden">
+            <div class="max-w-5xl mx-auto">
+                <div class="bg-white rounded-2xl shadow-xl p-8 mb-6">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-2xl font-bold gradient-text">单词配对消消乐</h2>
+                        <button id="btnBackToStudentFromGame" class="text-gray-500 hover:text-gray-700 transition-colors flex items-center">
+                            <i class="fa fa-arrow-left mr-2"></i> 返回
+                        </button>
+                    </div>
+                    
+                    <div class="mb-5">
+                        <label for="selectGameGroup" class="block text-gray-700 mb-2 font-medium">选择游戏组别</label>
+                        <select id="selectGameGroup" class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-blue-500 transition-colors bg-white">
+                            <!-- 游戏组别选项将在这里动态生成 -->
+                        </select>
+                    </div>
+                    
+                    <!-- 游戏状态栏 -->
+                    <div id="gameStats" class="hidden mb-6 p-4 bg-gradient-to-r from-blue-50 to-pink-50 rounded-xl">
+                        <div class="flex flex-wrap items-center justify-between gap-4">
+                            <div class="flex items-center gap-6">
+                                <div class="flex items-center text-gray-700">
+                                    <i class="fa fa-check-circle text-green-500 mr-2"></i>
+                                    <span>已配对: <strong id="matchedCount" class="text-green-600">0</strong></span>
+                                </div>
+                                <div class="flex items-center text-gray-700">
+                                    <i class="fa fa-refresh text-blue-500 mr-2"></i>
+                                    <span>尝试次数: <strong id="attemptsCount" class="text-blue-600">0</strong></span>
+                                </div>
+                            </div>
+                            <div id="gameTimer" class="flex items-center text-gray-700">
+                                <i class="fa fa-clock-o text-purple-500 mr-2"></i>
+                                <span id="timerDisplay" class="font-mono font-bold text-purple-600">00:00</span>
+                            </div>
+                        </div>
+                        <!-- 进度条 -->
+                        <div class="mt-3">
+                            <div class="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                                <div id="progressBar" class="progress-bar h-full bg-gradient-to-r from-green-400 to-green-600 rounded-full" style="width: 0%"></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="flex flex-wrap items-center gap-3 mb-6">
+                        <button id="btnStartGame" class="px-6 py-3 gradient-bg text-white rounded-xl hover:shadow-lg transition-all duration-300 font-medium flex items-center">
+                            <i class="fa fa-play mr-2"></i> 开始游戏
+                        </button>
+                        <button id="btnRestartGame" class="px-6 py-3 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-xl hover:shadow-lg transition-all duration-300 font-medium flex items-center hidden">
+                            <i class="fa fa-refresh mr-2"></i> 重新开始
+                        </button>
+                    </div>
+                    
+                    <div id="gameBoard" class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-4 mb-6 hidden">
+                        <!-- 游戏卡片将在这里动态生成 -->
+                    </div>
+                    
+                    <!-- 游戏结果 -->
+                    <div id="gameResult" class="hidden animate-bounce-in">
+                        <div class="bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-300 rounded-2xl p-8 text-center">
+                            <div class="w-20 h-20 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <i class="fa fa-trophy text-white text-4xl"></i>
+                            </div>
+                            <strong class="text-2xl gradient-text block mb-4">游戏完成！</strong>
+                            <div class="grid grid-cols-3 gap-6 max-w-md mx-auto">
+                                <div class="bg-white rounded-xl p-4 shadow">
+                                    <p class="text-gray-500 text-sm">正确率</p>
+                                    <p id="gameAccuracy" class="text-2xl font-bold text-green-600">100%</p>
+                                </div>
+                                <div class="bg-white rounded-xl p-4 shadow">
+                                    <p class="text-gray-500 text-sm">用时</p>
+                                    <p id="gameTime" class="text-2xl font-bold text-purple-600">00:30</p>
+                                </div>
+                                <div class="bg-white rounded-xl p-4 shadow">
+                                    <p class="text-gray-500 text-sm">尝试次数</p>
+                                    <p id="gameAttempts" class="text-2xl font-bold text-blue-600">10</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- 页脚 -->
+    <footer class="gradient-bg text-white py-6 mt-12">
+        <div class="container mx-auto px-4 text-center">
+            <p class="font-light">© 2025 英语单词学习助手 - 专为英语教师和学生设计</p>
+        </div>
+    </footer>
+
+    <!-- 音频播放器 -->
+    <audio id="audioPlayer" preload="auto"></audio>
+
+    <!-- 游戏音效 -->
+    <audio id="successSound" preload="auto"></audio>
+    <audio id="failSound" preload="auto"></audio>
+
+    <!-- JavaScript -->
+    <script>
+        // 全局变量
+        let currentUser = 'student';
+        let currentWordList = null;
+        let currentWordIndex = 0;
+        let isCardFlipped = false;
+        let showSyllables = false;
+        let isAutoPlay = false;
+        let autoPlayInterval = null;
+        let favoriteWords = [];
+        let gameCards = [];
+        let selectedCards = [];
+        let matchedPairs = 0;
+        let gameAttempts = 0;
+        let correctAttempts = 0;
+        let gameStartTime = 0;
+        let gameTimer = null;
+        let isGameActive = false;
+        let totalPairs = 0;
+        let audioContext = null; // Web Audio API 上下文
+
+        // 初始化音频上下文（需要在用户交互后调用）
+        function initAudioContext() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            return audioContext;
+        }
+
+        // 播放音效函数
+        function playSound(type) {
+            try {
+                const ctx = initAudioContext();
+                const oscillator = ctx.createOscillator();
+                const gainNode = ctx.createGain();
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(ctx.destination);
+                
+                const now = ctx.currentTime;
+                
+                switch(type) {
+                    case 'flip': // 翻牌音效
+                        oscillator.frequency.setValueAtTime(800, now);
+                        oscillator.frequency.exponentialRampToValueAtTime(1200, now + 0.05);
+                        gainNode.gain.setValueAtTime(0.1, now);
+                        gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+                        oscillator.start(now);
+                        oscillator.stop(now + 0.1);
+                        break;
+                        
+                    case 'match': // 配对成功音效
+                        oscillator.frequency.setValueAtTime(523, now); // C5
+                        oscillator.frequency.setValueAtTime(659, now + 0.1); // E5
+                        oscillator.frequency.setValueAtTime(784, now + 0.2); // G5
+                        oscillator.type = 'sine';
+                        gainNode.gain.setValueAtTime(0.2, now);
+                        gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+                        oscillator.start(now);
+                        oscillator.stop(now + 0.4);
+                        break;
+                        
+                    case 'mismatch': // 配对失败音效
+                        oscillator.frequency.setValueAtTime(300, now);
+                        oscillator.frequency.setValueAtTime(200, now + 0.1);
+                        oscillator.type = 'square';
+                        gainNode.gain.setValueAtTime(0.1, now);
+                        gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+                        oscillator.start(now);
+                        oscillator.stop(now + 0.2);
+                        break;
+                        
+                    case 'win': // 游戏胜利音效
+                        const notes = [523, 659, 784, 1047]; // C5, E5, G5, C6
+                        notes.forEach((freq, i) => {
+                            const osc = ctx.createOscillator();
+                            const gain = ctx.createGain();
+                            osc.connect(gain);
+                            gain.connect(ctx.destination);
+                            osc.frequency.setValueAtTime(freq, now + i * 0.15);
+                            osc.type = 'sine';
+                            gain.gain.setValueAtTime(0, now + i * 0.15);
+                            gain.gain.linearRampToValueAtTime(0.2, now + i * 0.15 + 0.05);
+                            gain.gain.exponentialRampToValueAtTime(0.01, now + i * 0.15 + 0.4);
+                            osc.start(now + i * 0.15);
+                            osc.stop(now + i * 0.15 + 0.4);
+                        });
+                        return; // 提前返回，因为上面已经处理了
+                        
+                    case 'click': // 点击音效
+                        oscillator.frequency.setValueAtTime(600, now);
+                        oscillator.type = 'sine';
+                        gainNode.gain.setValueAtTime(0.05, now);
+                        gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.05);
+                        oscillator.start(now);
+                        oscillator.stop(now + 0.05);
+                        break;
+                }
+            } catch (e) {
+                // 音频不支持，静默失败
+            }
+        }
+        
+        // Toast提示函数
+        function showToast(message, type = 'info') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = `toast ${type}`;
+            
+            // 显示动画
+            setTimeout(() => {
+                toast.classList.add('show');
+            }, 10);
+            
+            // 2秒后隐藏
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 2000);
+        }
+        
+        // 示例单词本数据
+        const sampleWordList = {
+            id: 'sample',
+            name: '示例单词本',
+            words: [
+                { word: 'apple', pos: 'n.', definition: 'a round fruit with smooth skin and crisp flesh', translation: '苹果', imageUrl: 'https://images.unsplash.com/photo-1579882175769-93ef1a86115b?q=80&w=200', audioUrl: null },
+                { word: 'beautiful', pos: 'adj.', definition: 'having beauty; giving pleasure to the senses', translation: '美丽的', imageUrl: 'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?q=80&w=200', audioUrl: null },
+                { word: 'computer', pos: 'n.', definition: 'an electronic device for storing and processing data', translation: '计算机', imageUrl: 'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?q=80&w=200', audioUrl: null }
+            ]
+        };
+        
+        const sampleGameGroup = {
+            id: 'sample-game',
+            name: '示例游戏组',
+            wordListId: 'sample',
+            wordCount: 3,
+            enableTimer: true,
+            advancedMode: false
+        };
+
+        // DOM 加载完成后执行
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeData();
+            bindEvents();
+            showPage('homePage');
+        });
+
+        // 初始化数据
+        function initializeData() {
+            let wordLists = JSON.parse(localStorage.getItem('wordLists')) || [];
+            let gameGroups = JSON.parse(localStorage.getItem('gameGroups')) || [];
+            localStorage.getItem('teacherPassword') || localStorage.setItem('teacherPassword', '123456');
+            JSON.parse(localStorage.getItem('learningRecords')) || [];
+            
+            if (wordLists.length === 0) {
+                wordLists.push(sampleWordList);
+                localStorage.setItem('wordLists', JSON.stringify(wordLists));
+            }
+            
+            if (gameGroups.length === 0) {
+                gameGroups.push(sampleGameGroup);
+                localStorage.setItem('gameGroups', JSON.stringify(gameGroups));
+            }
+            
+            if (wordLists.length > 0) {
+                currentWordList = wordLists[0];
+            }
+        }
+
+        // 绑定事件
+        function bindEvents() {
+            // 导航按钮
+            document.getElementById('btnHome').addEventListener('click', () => showPage('homePage'));
+            document.getElementById('btnTeacher').addEventListener('click', () => showPage('teacherLoginPage'));
+            document.getElementById('btnStudent').addEventListener('click', () => showPage('studentPage'));
+            
+            // 首页按钮
+            document.getElementById('enterTeacher').addEventListener('click', () => showPage('teacherLoginPage'));
+            document.getElementById('enterStudent').addEventListener('click', () => showPage('studentPage'));
+            
+            // 教师登录
+            document.getElementById('teacherLoginForm').addEventListener('submit', handleTeacherLogin);
+            
+            // 教师页面按钮
+            document.getElementById('btnDownloadTemplate').addEventListener('click', downloadTemplate);
+            document.getElementById('btnUploadWords').addEventListener('click', () => document.getElementById('wordListFile').click());
+            document.getElementById('wordListFile').addEventListener('change', handleWordListUpload);
+            document.getElementById('btnManageWordLists').addEventListener('click', showWordListManagement);
+            document.getElementById('btnCloseWordListManagement').addEventListener('click', hideWordListManagement);
+            document.getElementById('btnClosePreview').addEventListener('click', hideWordListPreview);
+            document.getElementById('btnSaveWordList').addEventListener('click', saveWordList);
+            document.getElementById('btnCancelUpload').addEventListener('click', hideWordListPreview);
+            document.getElementById('btnChangePassword').addEventListener('click', changeTeacherPassword);
+            
+            // 游戏设置按钮
+            document.getElementById('btnCreateGameGroup').addEventListener('click', showGameGroupCreator);
+            document.getElementById('btnManageGameGroups').addEventListener('click', showGameGroupManagement);
+            document.getElementById('btnCloseGameGroupCreator').addEventListener('click', hideGameGroupCreator);
+            document.getElementById('btnCloseGameGroupManagement').addEventListener('click', hideGameGroupManagement);
+            document.getElementById('btnSaveGameGroup').addEventListener('click', saveGameGroup);
+            document.getElementById('btnCancelGameGroup').addEventListener('click', hideGameGroupCreator);
+            
+            // 学生页面按钮
+            document.getElementById('enterFlashcards').addEventListener('click', showFlashcardsPage);
+            document.getElementById('enterMatchingGame').addEventListener('click', showMatchingGamePage);
+            
+            // 闪卡页面按钮
+            document.getElementById('btnBackToStudent').addEventListener('click', () => showPage('studentPage'));
+            document.getElementById('flashcard').addEventListener('click', flipCard);
+            document.getElementById('btnPlayAudio').addEventListener('click', playWordAudio);
+            document.getElementById('cardPlayAudio').addEventListener('click', (e) => { e.stopPropagation(); playWordAudio(); });
+            document.getElementById('btnToggleAutoPlay').addEventListener('click', toggleAutoPlay);
+            document.getElementById('btnPauseAutoPlay').addEventListener('click', pauseAutoPlay);
+            document.getElementById('btnToggleFavorite').addEventListener('click', toggleFavorite);
+            document.getElementById('selectFlashcardWordList').addEventListener('change', changeFlashcardWordList);
+            document.getElementById('autoPlaySpeed').addEventListener('change', updateAutoPlaySpeed);
+            document.getElementById('btnPrevCard').addEventListener('click', showPreviousCard);
+            document.getElementById('btnNextCard').addEventListener('click', showNextCard);
+            
+            // 消消乐游戏页面按钮
+            document.getElementById('btnBackToStudentFromGame').addEventListener('click', () => showPage('studentPage'));
+            document.getElementById('btnStartGame').addEventListener('click', startGame);
+            document.getElementById('btnRestartGame').addEventListener('click', restartGame);
+            document.getElementById('selectGameGroup').addEventListener('change', loadGameGroup);
+            
+            // 闪卡滑动手势
+            let touchStartX = 0;
+            let touchEndX = 0;
+            
+            document.getElementById('flashcard').addEventListener('touchstart', function(e) {
+                touchStartX = e.changedTouches[0].screenX;
+            }, false);
+            
+            document.getElementById('flashcard').addEventListener('touchend', function(e) {
+                touchEndX = e.changedTouches[0].screenX;
+                handleSwipe();
+            }, false);
+            
+            function handleSwipe() {
+                const swipeThreshold = 50;
+                if (touchEndX < touchStartX - swipeThreshold) {
+                    showNextCard();
+                } else if (touchEndX > touchStartX + swipeThreshold) {
+                    showPreviousCard();
+                }
+            }
+        }
+
+        // 显示页面
+        function showPage(pageId) {
+            document.querySelectorAll('main > section').forEach(page => {
+                page.classList.add('hidden');
+            });
+            document.getElementById(pageId).classList.remove('hidden');
+            
+            if (pageId === 'studentPage') updateStudentPage();
+            else if (pageId === 'flashcardsPage') updateFlashcardsPage();
+            else if (pageId === 'matchingGamePage') updateMatchingGamePage();
+            
+            // 页面切换时暂停自动播放
+            if (pageId !== 'flashcardsPage' && isAutoPlay) {
+                pauseAutoPlay();
+            }
+            
+            // 页面切换时停止游戏
+            if (pageId !== 'matchingGamePage' && isGameActive) {
+                isGameActive = false;
+                if (gameTimer) {
+                    clearInterval(gameTimer);
+                    gameTimer = null;
+                }
+            }
+        }
+
+        // 更新学生页面
+        function updateStudentPage() {
+            loadLearningRecords();
+        }
+
+        // 加载学习记录
+        function loadLearningRecords() {
+            const records = JSON.parse(localStorage.getItem('learningRecords')) || [];
+            const container = document.getElementById('learningRecords');
+            
+            if (records.length === 0) {
+                container.innerHTML = '<p class="text-gray-500 text-center py-8">暂无学习记录</p>';
+                return;
+            }
+            
+            let html = '';
+            records.slice(-5).reverse().forEach(record => {
+                html += `
+                    <div class="bg-gradient-to-r from-blue-50 to-pink-50 rounded-xl p-4 border border-gray-100 hover:shadow-md transition-shadow">
+                        <div class="flex justify-between items-center mb-2">
+                            <h4 class="font-semibold text-gray-800">${record.activity}</h4>
+                            <span class="text-sm text-gray-400">${formatDate(record.timestamp)}</span>
+                        </div>
+                        <p class="text-gray-600 text-sm">${record.details}</p>
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = html;
+        }
+
+        // 格式化日期
+        function formatDate(timestamp) {
+            const date = new Date(timestamp);
+            return `${date.getFullYear()}-${padZero(date.getMonth() + 1)}-${padZero(date.getDate())} ${padZero(date.getHours())}:${padZero(date.getMinutes())}`;
+        }
+
+        // 数字补零
+        function padZero(num) {
+            return num < 10 ? '0' + num : num;
+        }
+
+        // 教师登录
+        function handleTeacherLogin(e) {
+            e.preventDefault();
+            const password = document.getElementById('teacherPassword').value;
+            const storedPassword = localStorage.getItem('teacherPassword') || '123456';
+            
+            if (password === storedPassword) {
+                currentUser = 'teacher';
+                showPage('teacherPage');
+                showToast('登录成功！', 'success');
+            } else {
+                showToast('密码错误，请重试！', 'error');
+            }
+        }
+
+        // 下载Excel模板
+        function downloadTemplate() {
+            const wb = XLSX.utils.book_new();
+            const data = [
+                ['单词', '词性', '英文释义', '中文释义', '图片（手动上传）', '音频（上传）'],
+                ['apple', 'n.', 'a round fruit with smooth skin and crisp flesh', '苹果', '上传图片/自动生成', '上传mp3音频'],
+                ['beautiful', 'adj.', 'having beauty; giving pleasure to the senses or the mind', '美丽的', '上传图片/自动生成', '上传mp3音频']
+            ];
+            const ws = XLSX.utils.aoa_to_sheet(data);
+            XLSX.utils.book_append_sheet(wb, ws, '单词表');
+            XLSX.writeFile(wb, '英语单词模板.xlsx');
+            showToast('模板下载成功！', 'success');
+        }
+
+        // 处理单词本上传
+        function handleWordListUpload(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const sheetName = workbook.SheetNames[0];
+                const sheet = workbook.Sheets[sheetName];
+                const jsonData = XLSX.utils.sheet_to_json(sheet);
+                
+                const validationResult = validateWordListData(jsonData);
+                
+                if (validationResult.isValid) {
+                    showWordListPreview(validationResult.data);
+                } else {
+                    showValidationErrors(validationResult.errors);
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        // 验证单词本数据
+        function validateWordListData(data) {
+            const requiredFields = ['单词', '词性', '英文释义', '中文释义'];
+            const errors = [];
+            const validatedData = [];
+            
+            data.forEach((row, index) => {
+                const rowErrors = [];
+                requiredFields.forEach(field => {
+                    if (!row[field] || row[field].toString().trim() === '') {
+                        rowErrors.push(`缺少${field}`);
+                    }
+                });
+                if (row['单词'] && !/^[a-zA-Z]+$/.test(row['单词'].toString().trim())) {
+                    rowErrors.push('单词格式不正确（只能包含字母）');
+                }
+                
+                if (rowErrors.length > 0) {
+                    errors.push(`第${index + 2}行: ${rowErrors.join(', ')}`);
+                } else {
+                    validatedData.push({
+                        word: row['单词'].toString().trim(),
+                        pos: row['词性'].toString().trim(),
+                        definition: row['英文释义'].toString().trim(),
+                        translation: row['中文释义'].toString().trim(),
+                        imageUrl: null,
+                        audioUrl: null
+                    });
+                }
+            });
+            
+            return { isValid: errors.length === 0, data: validatedData, errors };
+        }
+
+        // 显示单词本预览
+        function showWordListPreview(data) {
+            const tableBody = document.getElementById('wordListTableBody');
+            let html = '';
+            
+            data.forEach(word => {
+                html += `
+                    <tr class="hover:bg-gray-50 transition-colors">
+                        <td class="py-3 px-4 font-medium text-blue-600">${word.word}</td>
+                        <td class="py-3 px-4 text-gray-600 italic">${word.pos}</td>
+                        <td class="py-3 px-4 text-gray-500">${word.definition}</td>
+                        <td class="py-3 px-4 text-pink-600 font-medium">${word.translation}</td>
+                        <td class="py-3 px-4">
+                            <button class="text-blue-500 hover:text-blue-700 mr-3 upload-image" data-word="${word.word}">
+                                <i class="fa fa-image"></i>
+                            </button>
+                            <button class="text-pink-500 hover:text-pink-700 upload-audio" data-word="${word.word}">
+                                <i class="fa fa-volume-up"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            });
+            
+            tableBody.innerHTML = html;
+            document.getElementById('wordListPreview').classList.remove('hidden');
+            document.getElementById('validationErrors').classList.add('hidden');
+            localStorage.setItem('tempWordList', JSON.stringify(data));
+            
+            document.querySelectorAll('.upload-image').forEach(button => {
+                button.addEventListener('click', function() {
+                    const word = this.getAttribute('data-word');
+                    uploadImage(word);
+                });
+            });
+            
+            document.querySelectorAll('.upload-audio').forEach(button => {
+                button.addEventListener('click', function() {
+                    const word = this.getAttribute('data-word');
+                    uploadAudio(word);
+                });
+            });
+        }
+
+        // 显示验证错误
+        function showValidationErrors(errors) {
+            const errorList = document.getElementById('errorList');
+            let html = '';
+            errors.forEach(error => {
+                html += `<p>• ${error}</p>`;
+            });
+            errorList.innerHTML = html;
+            document.getElementById('validationErrors').classList.remove('hidden');
+        }
+
+        // 隐藏单词本预览
+        function hideWordListPreview() {
+            document.getElementById('wordListPreview').classList.add('hidden');
+            document.getElementById('wordListFile').value = '';
+            localStorage.removeItem('tempWordList');
+        }
+
+        // 保存单词本
+        function saveWordList() {
+            const name = document.getElementById('wordListName').value.trim();
+            if (!name) {
+                showToast('请输入单词本名称', 'error');
+                return;
+            }
+            
+            const tempData = JSON.parse(localStorage.getItem('tempWordList')) || [];
+            if (tempData.length === 0) {
+                showToast('没有可保存的数据', 'error');
+                return;
+            }
+            
+            const newWordList = { id: 'wl-' + Date.now(), name, words: tempData };
+            let wordLists = JSON.parse(localStorage.getItem('wordLists')) || [];
+            wordLists.push(newWordList);
+            localStorage.setItem('wordLists', JSON.stringify(wordLists));
+            currentWordList = newWordList;
+            hideWordListPreview();
+            showToast('单词本保存成功！', 'success');
+        }
+
+        // 上传图片
+        function uploadImage(word) {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/*';
+            
+            input.onchange = function(e) {
+                const file = e.target.files[0];
+                if (!file) return;
+                
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const tempData = JSON.parse(localStorage.getItem('tempWordList')) || [];
+                    const wordIndex = tempData.findIndex(w => w.word === word);
+                    
+                    if (wordIndex !== -1) {
+                        tempData[wordIndex].imageUrl = e.target.result;
+                        localStorage.setItem('tempWordList', JSON.stringify(tempData));
+                        showWordListPreview(tempData);
+                        showToast('图片上传成功！', 'success');
+                    }
+                };
+                reader.readAsDataURL(file);
+            };
+            input.click();
+        }
+
+        // 上传音频
+        function uploadAudio(word) {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'audio/mp3';
+            
+            input.onchange = function(e) {
+                const file = e.target.files[0];
+                if (!file) return;
+                
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const tempData = JSON.parse(localStorage.getItem('tempWordList')) || [];
+                    const wordIndex = tempData.findIndex(w => w.word === word);
+                    
+                    if (wordIndex !== -1) {
+                        tempData[wordIndex].audioUrl = e.target.result;
+                        localStorage.setItem('tempWordList', JSON.stringify(tempData));
+                        showWordListPreview(tempData);
+                        showToast('音频上传成功！', 'success');
+                    }
+                };
+                reader.readAsDataURL(file);
+            };
+            input.click();
+        }
+
+        // 显示单词本管理
+        function showWordListManagement() {
+            const container = document.getElementById('wordListContainer');
+            const wordLists = JSON.parse(localStorage.getItem('wordLists')) || [];
+            
+            let html = '';
+            if (wordLists.length === 0) {
+                html = '<p class="text-gray-500 text-center py-8">暂无单词本</p>';
+            } else {
+                wordLists.forEach(wordList => {
+                    html += `
+                        <div class="bg-gradient-to-r from-blue-50 to-pink-50 rounded-xl p-5 border border-gray-200 hover:shadow-md transition-shadow">
+                            <div class="flex justify-between items-center mb-2">
+                                <h4 class="font-bold text-lg text-gray-800">${wordList.name}</h4>
+                                <div>
+                                    <button class="text-blue-500 hover:text-blue-700 mr-3 edit-word-list" data-id="${wordList.id}">
+                                        <i class="fa fa-pencil"></i>
+                                    </button>
+                                    <button class="text-red-500 hover:text-red-700 delete-word-list" data-id="${wordList.id}">
+                                        <i class="fa fa-trash"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <p class="text-sm text-gray-500 flex items-center">
+                                <i class="fa fa-book mr-1"></i>单词数量: ${wordList.words.length}
+                            </p>
+                        </div>
+                    `;
+                });
+            }
+            
+            container.innerHTML = html;
+            document.getElementById('wordListManagement').classList.remove('hidden');
+            
+            document.querySelectorAll('.edit-word-list').forEach(button => {
+                button.addEventListener('click', function() {
+                    const id = this.getAttribute('data-id');
+                    editWordList(id);
+                });
+            });
+            
+            document.querySelectorAll('.delete-word-list').forEach(button => {
+                button.addEventListener('click', function() {
+                    const id = this.getAttribute('data-id');
+                    deleteWordList(id);
+                });
+            });
+        }
+
+        // 隐藏单词本管理
+        function hideWordListManagement() {
+            document.getElementById('wordListManagement').classList.add('hidden');
+        }
+
+        // 编辑单词本
+        function editWordList(id) {
+            const wordLists = JSON.parse(localStorage.getItem('wordLists')) || [];
+            const wordList = wordLists.find(wl => wl.id === id);
+            if (!wordList) return;
+            
+            document.getElementById('editWordListName').value = wordList.name;
+            
+            const container = document.getElementById('editWordListContainer');
+            let html = '';
+            
+            wordList.words.forEach((word, index) => {
+                html += `
+                    <div class="bg-gray-50 rounded-xl p-4 word-edit-form">
+                        <div class="flex justify-between items-center mb-3">
+                            <h5 class="font-semibold text-gray-700">单词 ${index + 1}</h5>
+                            <button class="text-red-500 hover:text-red-700 remove-word" data-index="${index}">
+                                <i class="fa fa-times"></i>
+                            </button>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-gray-600 text-sm mb-1">单词</label>
+                                <input type="text" class="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 word-input" value="${word.word}">
+                            </div>
+                            <div>
+                                <label class="block text-gray-600 text-sm mb-1">词性</label>
+                                <input type="text" class="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 pos-input" value="${word.pos}">
+                            </div>
+                            <div>
+                                <label class="block text-gray-600 text-sm mb-1">英文释义</label>
+                                <input type="text" class="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 definition-input" value="${word.definition}">
+                            </div>
+                            <div>
+                                <label class="block text-gray-600 text-sm mb-1">中文释义</label>
+                                <input type="text" class="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 translation-input" value="${word.translation}">
+                            </div>
+                        </div>
+                        <div class="mt-3 flex items-center gap-4">
+                            <button class="text-blue-500 hover:text-blue-700 edit-image" data-index="${index}">
+                                <i class="fa fa-image mr-1"></i> ${word.imageUrl ? '更换图片' : '上传图片'}
+                            </button>
+                            <button class="text-pink-500 hover:text-pink-700 edit-audio" data-index="${index}">
+                                <i class="fa fa-volume-up mr-1"></i> ${word.audioUrl ? '更换音频' : '上传音频'}
+                            </button>
+                        </div>
+                        <input type="hidden" class="image-url-input" value="${word.imageUrl || ''}">
+                        <input type="hidden" class="audio-url-input" value="${word.audioUrl || ''}">
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = html;
+            document.getElementById('wordListEditor').classList.remove('hidden');
+            hideWordListManagement();
+            localStorage.setItem('currentEditingWordListId', id);
+            
+            // 重新绑定事件
+            document.querySelectorAll('.remove-word').forEach(button => {
+                button.addEventListener('click', function() {
+                    const index = parseInt(this.getAttribute('data-index'));
+                    removeWordFromEditor(index);
+                });
+            });
+            
+            document.querySelectorAll('.edit-image').forEach(button => {
+                button.addEventListener('click', function() {
+                    const index = parseInt(this.getAttribute('data-index'));
+                    editWordImage(index);
+                });
+            });
+            
+            document.querySelectorAll('.edit-audio').forEach(button => {
+                button.addEventListener('click', function() {
+                    const index = parseInt(this.getAttribute('data-index'));
+                    editWordAudio(index);
+                });
+            });
+            
+            document.getElementById('btnSaveEditedWordList').onclick = saveEditedWordList;
+            document.getElementById('btnAddWord').onclick = addWordToEditor;
+            document.getElementById('btnCloseEditor').onclick = hideWordListEditor;
+        }
+
+        // 隐藏单词本编辑器
+        function hideWordListEditor() {
+            document.getElementById('wordListEditor').classList.add('hidden');
+            localStorage.removeItem('currentEditingWordListId');
+        }
+
+        // 从编辑器中移除单词
+        function removeWordFromEditor(index) {
+            const forms = document.querySelectorAll('.word-edit-form');
+            if (index >= 0 && index < forms.length) {
+                forms[index].remove();
+            }
+        }
+
+        // 编辑单词图片
+        function editWordImage(index) {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/*';
+            
+            input.onchange = function(e) {
+                const file = e.target.files[0];
+                if (!file) return;
+                
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const imageUrlInput = document.querySelectorAll('.image-url-input')[index];
+                    if (imageUrlInput) {
+                        imageUrlInput.value = e.target.result;
+                        const button = document.querySelectorAll('.edit-image')[index];
+                        if (button) button.innerHTML = '<i class="fa fa-image mr-1"></i> 更换图片';
+                    }
+                };
+                reader.readAsDataURL(file);
+            };
+            input.click();
+        }
+
+        // 编辑单词音频
+        function editWordAudio(index) {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'audio/mp3';
+            
+            input.onchange = function(e) {
+                const file = e.target.files[0];
+                if (!file) return;
+                
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const audioUrlInput = document.querySelectorAll('.audio-url-input')[index];
+                    if (audioUrlInput) {
+                        audioUrlInput.value = e.target.result;
+                        const button = document.querySelectorAll('.edit-audio')[index];
+                        if (button) button.innerHTML = '<i class="fa fa-volume-up mr-1"></i> 更换音频';
+                    }
+                };
+                reader.readAsDataURL(file);
+            };
+            input.click();
+        }
+
+        // 添加单词到编辑器
+        function addWordToEditor() {
+            const container = document.getElementById('editWordListContainer');
+            const index = container.querySelectorAll('.word-edit-form').length;
+            
+            const html = `
+                <div class="bg-gray-50 rounded-xl p-4 word-edit-form">
+                    <div class="flex justify-between items-center mb-3">
+                        <h5 class="font-semibold text-gray-700">单词 ${index + 1}</h5>
+                        <button class="text-red-500 hover:text-red-700 remove-word" data-index="${index}">
+                            <i class="fa fa-times"></i>
+                        </button>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-gray-600 text-sm mb-1">单词</label>
+                            <input type="text" class="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 word-input">
+                        </div>
+                        <div>
+                            <label class="block text-gray-600 text-sm mb-1">词性</label>
+                            <input type="text" class="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 pos-input">
+                        </div>
+                        <div>
+                            <label class="block text-gray-600 text-sm mb-1">英文释义</label>
+                            <input type="text" class="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 definition-input">
+                        </div>
+                        <div>
+                            <label class="block text-gray-600 text-sm mb-1">中文释义</label>
+                            <input type="text" class="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 translation-input">
+                        </div>
+                    </div>
+                    <div class="mt-3 flex items-center gap-4">
+                        <button class="text-blue-500 hover:text-blue-700 edit-image" data-index="${index}">
+                            <i class="fa fa-image mr-1"></i> 上传图片
+                        </button>
+                        <button class="text-pink-500 hover:text-pink-700 edit-audio" data-index="${index}">
+                            <i class="fa fa-volume-up mr-1"></i> 上传音频
+                        </button>
+                    </div>
+                    <input type="hidden" class="image-url-input">
+                    <input type="hidden" class="audio-url-input">
+                </div>
+            `;
+            
+            container.insertAdjacentHTML('beforeend', html);
+            
+            // 重新绑定事件
+            document.querySelectorAll('.remove-word').forEach(button => {
+                button.onclick = function() {
+                    const idx = parseInt(this.getAttribute('data-index'));
+                    removeWordFromEditor(idx);
+                };
+            });
+            
+            document.querySelectorAll('.edit-image').forEach(button => {
+                button.onclick = function() {
+                    const idx = parseInt(this.getAttribute('data-index'));
+                    editWordImage(idx);
+                };
+            });
+            
+            document.querySelectorAll('.edit-audio').forEach(button => {
+                button.onclick = function() {
+                    const idx = parseInt(this.getAttribute('data-index'));
+                    editWordAudio(idx);
+                };
+            });
+        }
+
+        // 保存编辑后的单词本
+        function saveEditedWordList() {
+            const id = localStorage.getItem('currentEditingWordListId');
+            if (!id) return;
+            
+            const name = document.getElementById('editWordListName').value.trim();
+            if (!name) {
+                showToast('请输入单词本名称', 'error');
+                return;
+            }
+            
+            const forms = document.querySelectorAll('.word-edit-form');
+            const words = [];
+            
+            forms.forEach(form => {
+                const word = form.querySelector('.word-input').value.trim();
+                const pos = form.querySelector('.pos-input').value.trim();
+                const definition = form.querySelector('.definition-input').value.trim();
+                const translation = form.querySelector('.translation-input').value.trim();
+                const imageUrl = form.querySelector('.image-url-input').value;
+                const audioUrl = form.querySelector('.audio-url-input').value;
+                
+                if (word && pos && definition && translation) {
+                    words.push({ word, pos, definition, translation, imageUrl, audioUrl });
+                }
+            });
+            
+            if (words.length === 0) {
+                showToast('至少需要一个单词', 'error');
+                return;
+            }
+            
+            const wordLists = JSON.parse(localStorage.getItem('wordLists')) || [];
+            const index = wordLists.findIndex(wl => wl.id === id);
+            
+            if (index !== -1) {
+                wordLists[index] = { id, name, words };
+                localStorage.setItem('wordLists', JSON.stringify(wordLists));
+                
+                if (currentWordList && currentWordList.id === id) {
+                    currentWordList = wordLists[index];
+                }
+                
+                hideWordListEditor();
+                showWordListManagement();
+                showToast('单词本更新成功！', 'success');
+            }
+        }
+
+        // 删除单词本
+        function deleteWordList(id) {
+            if (!confirm('确定要删除这个单词本吗？')) return;
+            
+            let wordLists = JSON.parse(localStorage.getItem('wordLists')) || [];
+            wordLists = wordLists.filter(wl => wl.id !== id);
+            localStorage.setItem('wordLists', JSON.stringify(wordLists));
+            
+            if (currentWordList && currentWordList.id === id) {
+                currentWordList = wordLists.length > 0 ? wordLists[0] : null;
+            }
+            
+            showWordListManagement();
+            showToast('单词本已删除', 'info');
+        }
+
+        // 更改教师密码
+        function changeTeacherPassword() {
+            const newPassword = document.getElementById('newPassword').value;
+            const confirmPassword = document.getElementById('confirmPassword').value;
+            
+            if (!newPassword || !confirmPassword) {
+                showToast('请输入新密码和确认密码', 'error');
+                return;
+            }
+            
+            if (newPassword !== confirmPassword) {
+                showToast('两次输入的密码不一致', 'error');
+                return;
+            }
+            
+            localStorage.setItem('teacherPassword', newPassword);
+            document.getElementById('newPassword').value = '';
+            document.getElementById('confirmPassword').value = '';
+            showToast('密码修改成功！', 'success');
+        }
+
+        // 显示游戏组别创建
+        function showGameGroupCreator() {
+            const select = document.getElementById('selectWordList');
+            const wordLists = JSON.parse(localStorage.getItem('wordLists')) || [];
+            
+            let html = '';
+            if (wordLists.length === 0) {
+                html = '<option value="">暂无单词本</option>';
+            } else {
+                wordLists.forEach(wordList => {
+                    html += `<option value="${wordList.id}">${wordList.name} (${wordList.words.length}个单词)</option>`;
+                });
+            }
+            
+            select.innerHTML = html;
+            document.getElementById('gameGroupCreator').classList.remove('hidden');
+        }
+
+        // 隐藏游戏组别创建
+        function hideGameGroupCreator() {
+            document.getElementById('gameGroupCreator').classList.add('hidden');
+            document.getElementById('gameGroupName').value = '';
+            document.getElementById('wordCount').value = '10';
+            document.getElementById('enableTimer').checked = true;
+            document.getElementById('advancedMode').checked = false;
+        }
+
+        // 保存游戏组别
+        function saveGameGroup() {
+            const name = document.getElementById('gameGroupName').value.trim();
+            if (!name) {
+                showToast('请输入游戏组别名称', 'error');
+                return;
+            }
+            
+            const wordListId = document.getElementById('selectWordList').value;
+            if (!wordListId) {
+                showToast('请选择单词本', 'error');
+                return;
+            }
+            
+            const wordCount = parseInt(document.getElementById('wordCount').value);
+            if (isNaN(wordCount) || wordCount < 3 || wordCount > 20) {
+                showToast('请设置3-20个单词', 'error');
+                return;
+            }
+            
+            const enableTimer = document.getElementById('enableTimer').checked;
+            const advancedMode = document.getElementById('advancedMode').checked;
+            
+            const wordLists = JSON.parse(localStorage.getItem('wordLists')) || [];
+            const wordList = wordLists.find(wl => wl.id === wordListId);
+            
+            if (!wordList || wordList.words.length < wordCount) {
+                showToast(`所选单词本只有${wordList ? wordList.words.length : 0}个单词`, 'error');
+                return;
+            }
+            
+            const newGameGroup = { id: 'gg-' + Date.now(), name, wordListId, wordCount, enableTimer, advancedMode };
+            let gameGroups = JSON.parse(localStorage.getItem('gameGroups')) || [];
+            gameGroups.push(newGameGroup);
+            localStorage.setItem('gameGroups', JSON.stringify(gameGroups));
+            
+            hideGameGroupCreator();
+            showToast('游戏组别创建成功！', 'success');
+        }
+
+        // 显示游戏组别管理
+        function showGameGroupManagement() {
+            const container = document.getElementById('gameGroupContainer');
+            const gameGroups = JSON.parse(localStorage.getItem('gameGroups')) || [];
+            const wordLists = JSON.parse(localStorage.getItem('wordLists')) || [];
+            
+            let html = '';
+            if (gameGroups.length === 0) {
+                html = '<p class="text-gray-500 text-center py-8">暂无游戏组别</p>';
+            } else {
+                gameGroups.forEach(gameGroup => {
+                    const wordList = wordLists.find(wl => wl.id === gameGroup.wordListId);
+                    const wordListName = wordList ? wordList.name : '未知单词本';
+                    
+                    html += `
+                        <div class="bg-gradient-to-r from-pink-50 to-purple-50 rounded-xl p-5 border border-gray-200 hover:shadow-md transition-shadow">
+                            <div class="flex justify-between items-center mb-2">
+                                <h4 class="font-bold text-lg text-gray-800">${gameGroup.name}</h4>
+                                <button class="text-red-500 hover:text-red-700 delete-game-group" data-id="${gameGroup.id}">
+                                    <i class="fa fa-trash"></i>
+                                </button>
+                            </div>
+                            <p class="text-sm text-gray-500">单词本: ${wordListName}</p>
+                            <p class="text-sm text-gray-500">单词数量: ${gameGroup.wordCount}</p>
+                            <div class="flex gap-4 mt-2">
+                                <span class="text-xs ${gameGroup.enableTimer ? 'text-green-600' : 'text-gray-400'}">
+                                    <i class="fa ${gameGroup.enableTimer ? 'fa-clock-o text-green-500' : 'fa-clock-o text-gray-300'} mr-1"></i>计时
+                                </span>
+                                <span class="text-xs ${gameGroup.advancedMode ? 'text-purple-600' : 'text-gray-400'}">
+                                    <i class="fa ${gameGroup.advancedMode ? 'fa-star text-purple-500' : 'fa-star-o text-gray-300'} mr-1"></i>进阶
+                                </span>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+            
+            container.innerHTML = html;
+            document.getElementById('gameGroupManagement').classList.remove('hidden');
+            
+            document.querySelectorAll('.delete-game-group').forEach(button => {
+                button.addEventListener('click', function() {
+                    const id = this.getAttribute('data-id');
+                    deleteGameGroup(id);
+                });
+            });
+        }
+
+        // 隐藏游戏组别管理
+        function hideGameGroupManagement() {
+            document.getElementById('gameGroupManagement').classList.add('hidden');
+        }
+
+        // 删除游戏组别
+        function deleteGameGroup(id) {
+            if (!confirm('确定要删除这个游戏组别吗？')) return;
+            
+            let gameGroups = JSON.parse(localStorage.getItem('gameGroups')) || [];
+            gameGroups = gameGroups.filter(gg => gg.id !== id);
+            localStorage.setItem('gameGroups', JSON.stringify(gameGroups));
+            
+            showGameGroupManagement();
+            showToast('游戏组别已删除', 'info');
+        }
+
+        // 显示闪卡页面
+        function showFlashcardsPage() {
+            loadWordListOptions('selectFlashcardWordList');
+            updateFlashcard();
+            showPage('flashcardsPage');
+            recordLearning('单词闪卡学习', `开始学习单词本: ${currentWordList.name}`);
+        }
+
+        // 加载单词本选项
+        function loadWordListOptions(selectId) {
+            const select = document.getElementById(selectId);
+            const wordLists = JSON.parse(localStorage.getItem('wordLists')) || [];
+            
+            let html = '';
+            if (wordLists.length === 0) {
+                html = '<option value="">暂无单词本</option>';
+            } else {
+                wordLists.forEach(wordList => {
+                    html += `<option value="${wordList.id}" ${currentWordList && currentWordList.id === wordList.id ? 'selected' : ''}>${wordList.name} (${wordList.words.length}个单词)</option>`;
+                });
+            }
+            
+            select.innerHTML = html;
+        }
+
+        // 更新闪卡
+        function updateFlashcard() {
+            if (!currentWordList || currentWordList.words.length === 0) return;
+            
+            const word = currentWordList.words[currentWordIndex];
+            
+            document.getElementById('cardWord').innerHTML = highlightVowels(word.word);
+            
+            const cardImage = document.getElementById('cardImage');
+            if (word.imageUrl) {
+                cardImage.innerHTML = `<img src="${word.imageUrl}" alt="${word.word}" class="w-full h-full object-cover">`;
+            } else {
+                cardImage.innerHTML = `<i class="fa fa-image text-gray-300 text-5xl"></i>`;
+            }
+            
+            document.getElementById('cardWordBack').textContent = word.word;
+            document.getElementById('cardPos').textContent = word.pos;
+            document.getElementById('cardDefinition').textContent = word.definition;
+            document.getElementById('cardTranslation').textContent = word.translation;
+            
+            updateSyllables(word.word);
+            document.getElementById('cardCounter').textContent = `单词 ${currentWordIndex + 1} / ${currentWordList.words.length}`;
+            
+            document.getElementById('flashcard').classList.remove('flipped');
+            isCardFlipped = false;
+            updateFavoriteButton();
+        }
+
+        // 高亮元音字母
+        function highlightVowels(word) {
+            return word.replace(/[aeiouAEIOU]/g, '<span class="vowel">$&</span>');
+        }
+
+        // 更新音节划分
+        function updateSyllables(word) {
+            const syllables = divideIntoSyllables(word);
+            const container = document.getElementById('cardSyllables');
+            let html = '';
+            syllables.forEach(syllable => {
+                html += `<span class="syllable">${syllable}</span>`;
+            });
+            container.innerHTML = html;
+        }
+
+        // 划分音节
+        function divideIntoSyllables(word) {
+            word = word.toLowerCase();
+            const vowels = 'aeiouy';
+            const syllables = [];
+            let currentSyllable = '';
+            let prevIsVowel = false;
+            
+            for (let i = 0; i < word.length; i++) {
+                const char = word[i];
+                const isVowel = vowels.includes(char);
+                
+                if (isVowel && prevIsVowel && currentSyllable.length > 0 && i < word.length - 1) {
+                    syllables.push(currentSyllable);
+                    currentSyllable = char;
+                } else {
+                    currentSyllable += char;
+                }
+                prevIsVowel = isVowel;
+            }
+            
+            if (currentSyllable.length > 0) {
+                syllables.push(currentSyllable);
+            }
+            
+            if (syllables.length === 1) {
+                return [word];
+            }
+            return syllables;
+        }
+
+        // 更新收藏按钮状态
+        function updateFavoriteButton() {
+            const button = document.getElementById('btnToggleFavorite');
+            const word = currentWordList.words[currentWordIndex].word;
+            
+            if (isFavorite(word)) {
+                button.innerHTML = '<i class="fa fa-star mr-2"></i> 取消收藏';
+                button.classList.remove('bg-gray-200', 'text-gray-700');
+                button.classList.add('bg-gradient-to-r', 'from-yellow-400', 'to-yellow-500', 'text-white');
+            } else {
+                button.innerHTML = '<i class="fa fa-star-o mr-2"></i> 收藏';
+                button.classList.remove('bg-gradient-to-r', 'from-yellow-400', 'to-yellow-500', 'text-white');
+                button.classList.add('bg-gray-200', 'text-gray-700');
+            }
+        }
+
+        // 检查单词是否已收藏
+        function isFavorite(word) {
+            favoriteWords = JSON.parse(localStorage.getItem('favoriteWords')) || [];
+            return favoriteWords.includes(word);
+        }
+
+        // 切换收藏状态
+        function toggleFavorite() {
+            if (!currentWordList || currentWordList.words.length === 0) return;
+            
+            const word = currentWordList.words[currentWordIndex].word;
+            favoriteWords = JSON.parse(localStorage.getItem('favoriteWords')) || [];
+            
+            const index = favoriteWords.indexOf(word);
+            
+            if (index === -1) {
+                favoriteWords.push(word);
+                showToast('已添加到收藏', 'success');
+            } else {
+                favoriteWords.splice(index, 1);
+                showToast('已取消收藏', 'info');
+            }
+            
+            localStorage.setItem('favoriteWords', JSON.stringify(favoriteWords));
+            updateFavoriteButton();
+        }
+
+        // 翻转卡片
+        function flipCard() {
+            document.getElementById('flashcard').classList.toggle('flipped');
+            isCardFlipped = !isCardFlipped;
+            
+            if (!isCardFlipped) {
+                document.getElementById('cardSyllables').classList.add('hidden');
+                showSyllables = false;
+            }
+        }
+
+        // 显示上一个单词
+        function showPreviousCard() {
+            if (!currentWordList || currentWordList.words.length === 0) return;
+            currentWordIndex--;
+            if (currentWordIndex < 0) {
+                currentWordIndex = currentWordList.words.length - 1;
+            }
+            updateFlashcard();
+        }
+
+        // 显示下一个单词
+        function showNextCard() {
+            if (!currentWordList || currentWordList.words.length === 0) return;
+            currentWordIndex++;
+            if (currentWordIndex >= currentWordList.words.length) {
+                currentWordIndex = 0;
+            }
+            updateFlashcard();
+        }
+
+        // 播放单词音频
+        function playWordAudio() {
+            if (!currentWordList || currentWordList.words.length === 0) return;
+            
+            const word = currentWordList.words[currentWordIndex];
+            
+            if (word.audioUrl) {
+                const audioPlayer = document.getElementById('audioPlayer');
+                audioPlayer.src = word.audioUrl;
+                audioPlayer.play();
+            } else {
+                if ('speechSynthesis' in window) {
+                    const utterance = new SpeechSynthesisUtterance(word.word);
+                    utterance.lang = 'en-US';
+                    speechSynthesis.speak(utterance);
+                }
+            }
+        }
+
+        // 切换自动播放
+        function toggleAutoPlay() {
+            if (isAutoPlay) {
+                pauseAutoPlay();
+            } else {
+                startAutoPlay();
+            }
+        }
+
+        // 开始自动播放
+        function startAutoPlay() {
+            if (!currentWordList || currentWordList.words.length === 0) return;
+            
+            isAutoPlay = true;
+            document.querySelector('.auto-play-controls').classList.remove('hidden');
+            
+            document.getElementById('btnToggleAutoPlay').innerHTML = '<i class="fa fa-pause mr-2"></i> 暂停';
+            document.getElementById('btnToggleAutoPlay').classList.remove('gradient-bg');
+            document.getElementById('btnToggleAutoPlay').classList.add('bg-gradient-to-r', 'from-red-500', 'to-red-600');
+            
+            const speed = parseInt(document.getElementById('autoPlaySpeed').value);
+            
+            autoPlayInterval = setInterval(() => {
+                if (isCardFlipped) {
+                    flipCard();
+                } else {
+                    showNextCard();
+                }
+            }, speed);
+            
+            showToast('自动播放已开始', 'info');
+        }
+
+        // 暂停自动播放
+        function pauseAutoPlay() {
+            isAutoPlay = false;
+            document.querySelector('.auto-play-controls').classList.add('hidden');
+            
+            document.getElementById('btnToggleAutoPlay').innerHTML = '<i class="fa fa-play mr-2"></i> 自动播放';
+            document.getElementById('btnToggleAutoPlay').classList.add('gradient-bg');
+            document.getElementById('btnToggleAutoPlay').classList.remove('bg-gradient-to-r', 'from-red-500', 'to-red-600');
+            
+            if (autoPlayInterval) {
+                clearInterval(autoPlayInterval);
+                autoPlayInterval = null;
+            }
+            
+            showToast('自动播放已暂停', 'info');
+        }
+
+        // 更新自动播放速度
+        function updateAutoPlaySpeed() {
+            if (isAutoPlay) {
+                pauseAutoPlay();
+                startAutoPlay();
+            }
+        }
+
+        // 切换闪卡单词本
+        function changeFlashcardWordList() {
+            const wordListId = document.getElementById('selectFlashcardWordList').value;
+            if (!wordListId) return;
+            
+            const wordLists = JSON.parse(localStorage.getItem('wordLists')) || [];
+            const wordList = wordLists.find(wl => wl.id === wordListId);
+            
+            if (wordList) {
+                currentWordList = wordList;
+                currentWordIndex = 0;
+                updateFlashcard();
+                recordLearning('单词闪卡学习', `切换到单词本: ${wordList.name}`);
+                showToast(`已切换到: ${wordList.name}`, 'success');
+            }
+        }
+
+        // 显示配对游戏页面
+        function showMatchingGamePage() {
+            loadGameGroupOptions();
+            showPage('matchingGamePage');
+        }
+
+        // 加载游戏组别选项
+        function loadGameGroupOptions() {
+            const select = document.getElementById('selectGameGroup');
+            const gameGroups = JSON.parse(localStorage.getItem('gameGroups')) || [];
+            
+            let html = '';
+            if (gameGroups.length === 0) {
+                html = '<option value="">暂无游戏组别</option>';
+            } else {
+                gameGroups.forEach(gameGroup => {
+                    html += `<option value="${gameGroup.id}">${gameGroup.name} (${gameGroup.wordCount}个单词)</option>`;
+                });
+            }
+            
+            select.innerHTML = html;
+        }
+
+        // 加载游戏组别
+        function loadGameGroup() {
+            const gameGroupId = document.getElementById('selectGameGroup').value;
+            if (!gameGroupId) return;
+            
+            document.getElementById('gameResult').classList.add('hidden');
+            document.getElementById('gameBoard').classList.add('hidden');
+            document.getElementById('gameStats').classList.add('hidden');
+            document.getElementById('btnStartGame').classList.remove('hidden');
+            document.getElementById('btnRestartGame').classList.add('hidden');
+        }
+
+        // 开始游戏
+        function startGame() {
+            const gameGroupId = document.getElementById('selectGameGroup').value;
+            if (!gameGroupId) {
+                showToast('请选择游戏组别', 'error');
+                return;
+            }
+            
+            const gameGroups = JSON.parse(localStorage.getItem('gameGroups')) || [];
+            const gameGroup = gameGroups.find(gg => gg.id === gameGroupId);
+            
+            if (!gameGroup) return;
+            
+            const wordLists = JSON.parse(localStorage.getItem('wordLists')) || [];
+            const wordList = wordLists.find(wl => wl.id === gameGroup.wordListId);
+            
+            if (!wordList) return;
+            
+            prepareGameCards(wordList, gameGroup);
+            
+            document.getElementById('gameBoard').classList.remove('hidden');
+            document.getElementById('gameStats').classList.remove('hidden');
+            document.getElementById('btnStartGame').classList.add('hidden');
+            document.getElementById('btnRestartGame').classList.remove('hidden');
+            document.getElementById('gameResult').classList.add('hidden');
+            
+            // 重置状态显示
+            document.getElementById('matchedCount').textContent = '0';
+            document.getElementById('attemptsCount').textContent = '0';
+            document.getElementById('progressBar').style.width = '0%';
+            
+            if (gameGroup.enableTimer) {
+                startGameTimer();
+            } else {
+                document.getElementById('gameTimer').classList.add('hidden');
+            }
+            
+            isGameActive = true;
+            recordLearning('单词配对消消乐', `开始游戏: ${gameGroup.name}`);
+            showToast('游戏开始！找到所有匹配的单词吧！', 'success');
+            playSound('click'); // 播放开始游戏音效
+        }
+
+        // 准备游戏卡片
+        function prepareGameCards(wordList, gameGroup) {
+            gameCards = [];
+            selectedCards = [];
+            matchedPairs = 0;
+            gameAttempts = 0;
+            correctAttempts = 0;
+            
+            const shuffledWords = [...wordList.words].sort(() => Math.random() - 0.5);
+            const selectedWords = shuffledWords.slice(0, gameGroup.wordCount);
+            
+            totalPairs = selectedWords.length;
+            
+            selectedWords.forEach(word => {
+                gameCards.push({
+                    id: `word-${word.word}`,
+                    content: word.word,
+                    type: 'word',
+                    matchId: word.word,
+                    isSelected: false,
+                    isMatched: false
+                });
+                
+                gameCards.push({
+                    id: `trans-${word.word}`,
+                    content: word.translation,
+                    type: 'translation',
+                    matchId: word.word,
+                    isSelected: false,
+                    isMatched: false
+                });
+            });
+            
+            gameCards.sort(() => Math.random() - 0.5);
+            renderGameBoard(gameGroup);
+        }
+
+        // 渲染游戏板
+        function renderGameBoard(gameGroup) {
+            const board = document.getElementById('gameBoard');
+            let html = '';
+            
+            gameCards.forEach(card => {
+                html += `
+                    <div class="game-card h-24 sm:h-28" data-id="${card.id}" onclick="selectGameCard('${card.id}')">
+                        <div class="game-card-inner">
+                            <div class="game-card-front">
+                                <span class="text-center text-lg font-bold">${card.type === 'word' ? '?' : '?'}</span>
+                            </div>
+                            <div class="game-card-back">
+                                <span class="text-center text-sm sm:text-base font-bold leading-tight">${card.content}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            board.innerHTML = html;
+        }
+
+        // 选择游戏卡片
+        function selectGameCard(cardId) {
+            // 检查游戏是否进行中
+            if (!isGameActive) {
+                showToast('请先点击"开始游戏"按钮', 'info');
+                return;
+            }
+            
+            // 如果已经选择了2张卡片，不做任何操作
+            if (selectedCards.length >= 2) {
+                return;
+            }
+            
+            // 查找卡片
+            const card = gameCards.find(c => c.id === cardId);
+            if (!card || card.isSelected || card.isMatched) return;
+            
+            // 选择卡片
+            card.isSelected = true;
+            selectedCards.push(card);
+            
+            // 更新UI - 翻转卡片
+            const cardElement = document.querySelector(`.game-card[data-id="${cardId}"]`);
+            cardElement.classList.add('flipped', 'selected');
+            playSound('flip'); // 播放翻牌音效
+            
+            // 如果已经选择了两张卡片，检查是否匹配
+            if (selectedCards.length === 2) {
+                gameAttempts++;
+                document.getElementById('attemptsCount').textContent = gameAttempts;
+                
+                setTimeout(() => {
+                    checkMatch();
+                }, 600);
+            }
+        }
+
+        // 检查匹配
+        function checkMatch() {
+            const card1 = selectedCards[0];
+            const card2 = selectedCards[1];
+            
+            const cardElement1 = document.querySelector(`.game-card[data-id="${card1.id}"]`);
+            const cardElement2 = document.querySelector(`.game-card[data-id="${card2.id}"]`);
+            
+            if (card1.matchId === card2.matchId) {
+                // 匹配成功
+                card1.isMatched = true;
+                card2.isMatched = true;
+                matchedPairs++;
+                correctAttempts++;
+                
+                // 更新进度
+                document.getElementById('matchedCount').textContent = matchedPairs;
+                const progress = (matchedPairs / totalPairs) * 100;
+                document.getElementById('progressBar').style.width = `${progress}%`;
+                
+                // 添加成功动画
+                cardElement1.classList.add('matched');
+                cardElement2.classList.add('matched');
+                cardElement1.classList.remove('selected');
+                cardElement2.classList.remove('selected');
+                
+                showToast('配对成功！', 'success');
+                playSound('match'); // 播放配对成功音效
+                
+                // 检查游戏是否结束
+                if (matchedPairs === totalPairs) {
+                    setTimeout(() => {
+                        endGame();
+                    }, 600);
+                }
+            } else {
+                // 匹配失败
+                card1.isSelected = false;
+                card2.isSelected = false;
+                
+                // 添加错误动画
+                cardElement1.classList.add('wrong');
+                cardElement2.classList.add('wrong');
+                playSound('mismatch'); // 播放配对失败音效
+                
+                // 延迟后翻回卡片
+                setTimeout(() => {
+                    cardElement1.classList.remove('flipped', 'selected', 'wrong');
+                    cardElement2.classList.remove('flipped', 'selected', 'wrong');
+                }, 800);
+            }
+            
+            // 清空已选择卡片
+            selectedCards = [];
+        }
+
+        // 开始游戏计时器
+        function startGameTimer() {
+            gameStartTime = Date.now();
+            
+            if (gameTimer) {
+                clearInterval(gameTimer);
+            }
+            
+            document.getElementById('gameTimer').classList.remove('hidden');
+            
+            gameTimer = setInterval(() => {
+                const elapsedTime = Math.floor((Date.now() - gameStartTime) / 1000);
+                const minutes = Math.floor(elapsedTime / 60);
+                const seconds = elapsedTime % 60;
+                document.getElementById('timerDisplay').textContent = `${padZero(minutes)}:${padZero(seconds)}`;
+            }, 1000);
+        }
+
+        // 结束游戏
+        function endGame() {
+            isGameActive = false;
+            
+            if (gameTimer) {
+                clearInterval(gameTimer);
+                gameTimer = null;
+            }
+            
+            const elapsedTime = Math.floor((Date.now() - gameStartTime) / 1000);
+            const minutes = Math.floor(elapsedTime / 60);
+            const seconds = elapsedTime % 60;
+            const gameTime = `${padZero(minutes)}:${padZero(seconds)}`;
+            
+            const accuracy = gameAttempts > 0 ? Math.round((correctAttempts / gameAttempts) * 100) : 0;
+            
+            document.getElementById('gameAccuracy').textContent = `${accuracy}%`;
+            document.getElementById('gameTime').textContent = gameTime;
+            document.getElementById('gameAttempts').textContent = gameAttempts;
+            
+            document.getElementById('gameResult').classList.remove('hidden');
+            
+            const gameGroupId = document.getElementById('selectGameGroup').value;
+            const gameGroups = JSON.parse(localStorage.getItem('gameGroups')) || [];
+            const gameGroup = gameGroups.find(gg => gg.id === gameGroupId);
+            
+            if (gameGroup) {
+                recordLearning('单词配对消消乐', `完成游戏: ${gameGroup.name}, 正确率: ${accuracy}%, 用时: ${gameTime}`);
+            }
+            
+            showToast('恭喜你完成游戏！', 'success');
+            playSound('win'); // 播放游戏胜利音效
+        }
+
+        // 重新开始游戏
+        function restartGame() {
+            if (gameTimer) {
+                clearInterval(gameTimer);
+                gameTimer = null;
+            }
+            
+            document.getElementById('gameResult').classList.add('hidden');
+            startGame();
+        }
+
+        // 记录学习
+        function recordLearning(activity, details) {
+            const record = { activity, details, timestamp: Date.now() };
+            let learningRecords = JSON.parse(localStorage.getItem('learningRecords')) || [];
+            learningRecords.push(record);
+            
+            if (learningRecords.length > 100) {
+                learningRecords = learningRecords.slice(-100);
+            }
+            
+            localStorage.setItem('learningRecords', JSON.stringify(learningRecords));
+        }
+
+        // 显示页面 (修复重复定义)
+        function showPage(pageId) {
+            document.querySelectorAll('main > section').forEach(page => {
+                page.classList.add('hidden');
+            });
+            document.getElementById(pageId).classList.remove('hidden');
+            
+            if (pageId === 'studentPage') updateStudentPage();
+            else if (pageId === 'flashcardsPage') updateFlashcardsPage();
+            else if (pageId === 'matchingGamePage') updateMatchingGamePage();
+            
+            if (pageId !== 'flashcardsPage' && isAutoPlay) pauseAutoPlay();
+            if (pageId !== 'matchingGamePage' && isGameActive) {
+                isGameActive = false;
+                if (gameTimer) {
+                    clearInterval(gameTimer);
+                    gameTimer = null;
+                }
+            }
+        }
+
+        // 更新匹配游戏页面
+        function updateMatchingGamePage() {
+            loadGameGroupOptions();
+        }
+
+        // 更新闪卡页面
+        function updateFlashcardsPage() {
+            loadWordListOptions('selectFlashcardWordList');
+            if (currentWordList) updateFlashcard();
+        }
+    </script>
+</body>
+</html>

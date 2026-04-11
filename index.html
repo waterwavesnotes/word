@@ -1,7 +1,6 @@
-
 <!DOCTYPE html>
 <html lang="zh-CN">
-<script src="https://lf-cdn.coze.cn/obj/unpkg/coze-space/page-editor-general-web/0.1.0-alpha.274555/dist/umd/index.js"></script><script src="https://lf-cdn.coze.cn/obj/unpkg/coze-webapp/console-bridge/0.0.1-alpha.b2eb33/dist/index.js"></script><script src="https://lf-cdn.coze.cn/obj/unpkg/coze-webapp/history-bridge/0.0.1-alpha.9e64d9/dist/index.min.js"></script><head>
+<head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>英语单词学习助手</title>
@@ -943,13 +942,18 @@
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhjbmdrcnhsdHBkY2tiaWh1eWN4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU5MDE1OTAsImV4cCI6MjA5MTQ3NzU5MH0.yhL-wFi_Deqm_mVXZd8DqlsNYcQ64hIV7o5AexZ87Dg';
         
         // 创建 Supabase 客户端
-        let supabase = null;
+        let supabaseClient = null;
         let isCloudEnabled = true; // 云同步开关
         
         // 初始化 Supabase
         function initSupabase() {
-            if (typeof window.supabase !== 'undefined') {
-                supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            // Supabase SDK v2 CDN 版本挂载在 window.supabase 或全局 supabase
+            const sdk = typeof window.supabase !== 'undefined' 
+                ? window.supabase 
+                : (typeof supabase !== 'undefined' ? supabase : null);
+            
+            if (sdk && typeof sdk.createClient === 'function') {
+                supabaseClient = sdk.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
                 console.log('Supabase 客户端已初始化，云同步已启用');
                 return true;
             }
@@ -960,11 +964,11 @@
 
         // 从云端加载数据
         async function loadFromCloud() {
-            if (!supabase || !isCloudEnabled) return null;
+            if (!supabaseClient || !isCloudEnabled) return null;
             
             try {
                 // 加载单词本
-                const { data: wordLists, error: wlError } = await supabase
+                const { data: wordLists, error: wlError } = await supabaseClient
                     .from('word_lists')
                     .select('*')
                     .order('created_at', { ascending: true });
@@ -972,7 +976,7 @@
                 if (wlError) throw wlError;
                 
                 // 加载单词
-                const { data: words, error: wError } = await supabase
+                const { data: words, error: wError } = await supabaseClient
                     .from('words')
                     .select('*')
                     .order('created_at', { ascending: true });
@@ -980,7 +984,7 @@
                 if (wError) throw wError;
                 
                 // 加载游戏组别
-                const { data: gameGroups, error: ggError } = await supabase
+                const { data: gameGroups, error: ggError } = await supabaseClient
                     .from('game_groups')
                     .select('*')
                     .order('created_at', { ascending: true });
@@ -1005,17 +1009,17 @@
 
         // 保存单词本到云端
         async function saveWordListToCloud(wordList) {
-            if (!supabase || !isCloudEnabled) return false;
+            if (!supabaseClient || !isCloudEnabled) return false;
             
             try {
                 // 先删除旧的单词本数据（级联删除单词）
-                await supabase
+                await supabaseClient
                     .from('word_lists')
                     .delete()
                     .eq('id', wordList.id);
                 
                 // 保存单词本
-                const { error: wlError } = await supabase
+                const { error: wlError } = await supabaseClient
                     .from('word_lists')
                     .insert({
                         id: wordList.id,
@@ -1038,7 +1042,7 @@
                         audio_url: w.audioUrl || null
                     }));
                     
-                    const { error: wError } = await supabase
+                    const { error: wError } = await supabaseClient
                         .from('words')
                         .insert(wordsData);
                     
@@ -1056,17 +1060,17 @@
 
         // 保存游戏组别到云端
         async function saveGameGroupToCloud(gameGroup) {
-            if (!supabase || !isCloudEnabled) return false;
+            if (!supabaseClient || !isCloudEnabled) return false;
             
             try {
                 // 先删除旧的游戏组别
-                await supabase
+                await supabaseClient
                     .from('game_groups')
                     .delete()
                     .eq('id', gameGroup.id);
                 
                 // 保存游戏组别
-                const { error } = await supabase
+                const { error } = await supabaseClient
                     .from('game_groups')
                     .insert({
                         id: gameGroup.id,
@@ -1090,10 +1094,10 @@
 
         // 从云端删除单词本
         async function deleteWordListFromCloud(id) {
-            if (!supabase || !isCloudEnabled) return false;
+            if (!supabaseClient || !isCloudEnabled) return false;
             
             try {
-                const { error } = await supabase
+                const { error } = await supabaseClient
                     .from('word_lists')
                     .delete()
                     .eq('id', id);
@@ -1109,10 +1113,10 @@
 
         // 从云端删除游戏组别
         async function deleteGameGroupFromCloud(id) {
-            if (!supabase || !isCloudEnabled) return false;
+            if (!supabaseClient || !isCloudEnabled) return false;
             
             try {
-                const { error } = await supabase
+                const { error } = await supabaseClient
                     .from('game_groups')
                     .delete()
                     .eq('id', id);
@@ -1281,15 +1285,19 @@
         };
 
         // DOM 加载完成后执行
-        document.addEventListener('DOMContentLoaded', async function() {
+        document.addEventListener('DOMContentLoaded', function() {
             // 初始化 Supabase
             initSupabase();
             
             // 初始化数据（尝试从云端加载）
-            await initializeData();
-            
-            bindEvents();
-            showPage('homePage');
+            initializeData().then(() => {
+                bindEvents();
+                showPage('homePage');
+            }).catch(err => {
+                console.error('初始化失败:', err);
+                bindEvents();
+                showPage('homePage');
+            });
         });
 
         // 初始化数据（尝试从云端加载）
@@ -1300,28 +1308,36 @@
             localStorage.getItem('teacherPassword') || localStorage.setItem('teacherPassword', '123456');
             JSON.parse(localStorage.getItem('learningRecords')) || [];
             
-            // 尝试从云端加载
-            if (supabase && isCloudEnabled) {
+            // 设置超时，避免云端请求卡住
+            const cloudPromise = supabaseClient && isCloudEnabled ? loadFromCloud() : Promise.resolve(null);
+            const timeoutPromise = new Promise(resolve => setTimeout(() => resolve(null), 5000));
+            
+            let cloudData = null;
+            try {
+                const result = await Promise.race([cloudPromise, timeoutPromise]);
+                cloudData = result;
+            } catch (error) {
+                console.log('云端加载超时或失败，使用本地数据');
+            }
+            
+            if (cloudData) {
                 try {
-                    const cloudData = await loadFromCloud();
-                    if (cloudData) {
-                        const { localWordLists, localGameGroups } = convertCloudDataToLocal(cloudData);
-                        
-                        // 如果云端有数据且比本地多，用云端数据覆盖本地
-                        if (localWordLists.length > 0) {
-                            wordLists = localWordLists;
-                            localStorage.setItem('wordLists', JSON.stringify(wordLists));
-                        }
-                        
-                        if (localGameGroups.length > 0) {
-                            gameGroups = localGameGroups;
-                            localStorage.setItem('gameGroups', JSON.stringify(gameGroups));
-                        }
-                        
-                        console.log('已同步云端数据到本地');
+                    const { localWordLists, localGameGroups } = convertCloudDataToLocal(cloudData);
+                    
+                    // 如果云端有数据且比本地多，用云端数据覆盖本地
+                    if (localWordLists.length > 0) {
+                        wordLists = localWordLists;
+                        localStorage.setItem('wordLists', JSON.stringify(wordLists));
                     }
+                    
+                    if (localGameGroups.length > 0) {
+                        gameGroups = localGameGroups;
+                        localStorage.setItem('gameGroups', JSON.stringify(gameGroups));
+                    }
+                    
+                    console.log('已同步云端数据到本地');
                 } catch (error) {
-                    console.error('同步云端数据失败，使用本地数据:', error);
+                    console.error('转换云端数据失败:', error);
                 }
             }
             
@@ -1330,8 +1346,8 @@
                 wordLists.push(sampleWordList);
                 localStorage.setItem('wordLists', JSON.stringify(wordLists));
                 // 同时保存到云端
-                if (supabase && isCloudEnabled) {
-                    await saveWordListToCloud(sampleWordList);
+                if (supabaseClient && isCloudEnabled) {
+                    saveWordListToCloud(sampleWordList).catch(() => {});
                 }
             }
             
@@ -1339,8 +1355,8 @@
                 gameGroups.push(sampleGameGroup);
                 localStorage.setItem('gameGroups', JSON.stringify(gameGroups));
                 // 同时保存到云端
-                if (supabase && isCloudEnabled) {
-                    await saveGameGroupToCloud(sampleGameGroup);
+                if (supabaseClient && isCloudEnabled) {
+                    saveGameGroupToCloud(sampleGameGroup).catch(() => {});
                 }
             }
             
@@ -1700,7 +1716,7 @@
             hideWordListPreview();
             
             // 同时保存到云端
-            if (supabase && isCloudEnabled) {
+            if (supabaseClient && isCloudEnabled) {
                 const success = await saveWordListToCloud(newWordList);
                 if (success) {
                     showToast('单词本保存成功，已同步到云端！', 'success');
@@ -2082,7 +2098,7 @@
                 showWordListManagement();
                 
                 // 同时保存到云端
-                if (supabase && isCloudEnabled) {
+                if (supabaseClient && isCloudEnabled) {
                     const success = await saveWordListToCloud(wordLists[index]);
                     if (success) {
                         showToast('单词本更新成功，已同步到云端！', 'success');
@@ -2108,7 +2124,7 @@
             }
             
             // 同时从云端删除
-            if (supabase && isCloudEnabled) {
+            if (supabaseClient && isCloudEnabled) {
                 await deleteWordListFromCloud(id);
             }
             
@@ -2203,7 +2219,7 @@
             hideGameGroupCreator();
             
             // 同时保存到云端
-            if (supabase && isCloudEnabled) {
+            if (supabaseClient && isCloudEnabled) {
                 const success = await saveGameGroupToCloud(newGameGroup);
                 if (success) {
                     showToast('游戏组别创建成功，已同步到云端！', 'success');
@@ -2277,7 +2293,7 @@
             localStorage.setItem('gameGroups', JSON.stringify(gameGroups));
             
             // 同时从云端删除
-            if (supabase && isCloudEnabled) {
+            if (supabaseClient && isCloudEnabled) {
                 await deleteGameGroupFromCloud(id);
             }
             
@@ -2859,28 +2875,6 @@
             
             localStorage.setItem('learningRecords', JSON.stringify(learningRecords));
         }
-
-        // 显示页面 (修复重复定义)
-        function showPage(pageId) {
-            document.querySelectorAll('main > section').forEach(page => {
-                page.classList.add('hidden');
-            });
-            document.getElementById(pageId).classList.remove('hidden');
-            
-            if (pageId === 'studentPage') updateStudentPage();
-            else if (pageId === 'flashcardsPage') updateFlashcardsPage();
-            else if (pageId === 'matchingGamePage') updateMatchingGamePage();
-            
-            if (pageId !== 'flashcardsPage' && isAutoPlay) pauseAutoPlay();
-            if (pageId !== 'matchingGamePage' && isGameActive) {
-                isGameActive = false;
-                if (gameTimer) {
-                    clearInterval(gameTimer);
-                    gameTimer = null;
-                }
-            }
-        }
-
         // 更新匹配游戏页面
         function updateMatchingGamePage() {
             loadGameGroupOptions();

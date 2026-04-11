@@ -952,44 +952,63 @@
                 ? window.supabase 
                 : (typeof supabase !== 'undefined' ? supabase : null);
             
+            console.log('Supabase SDK 状态:', {
+                hasWindowSupabase: typeof window.supabase !== 'undefined',
+                hasGlobalSupabase: typeof supabase !== 'undefined',
+                sdkType: sdk ? typeof sdk : 'null'
+            });
+            
             if (sdk && typeof sdk.createClient === 'function') {
                 supabaseClient = sdk.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
                 console.log('Supabase 客户端已初始化，云同步已启用');
+                console.log('项目 URL:', SUPABASE_URL);
                 return true;
             }
-            console.log('Supabase SDK 未加载，将使用本地存储');
+            console.warn('Supabase SDK 未加载，将使用本地存储');
+            console.warn('请检查网络连接或 Supabase CDN 是否可用');
             isCloudEnabled = false;
             return false;
         }
 
         // 从云端加载数据
         async function loadFromCloud() {
-            if (!supabaseClient || !isCloudEnabled) return null;
+            if (!supabaseClient || !isCloudEnabled) {
+                console.log('loadFromCloud: supabaseClient 或 isCloudEnabled 为空');
+                return null;
+            }
             
             try {
+                console.log('开始从云端加载数据...');
+                
                 // 加载单词本
                 const { data: wordLists, error: wlError } = await supabaseClient
                     .from('word_lists')
-                    .select('*')
-                    .order('created_at', { ascending: true });
+                    .select('*');
                 
-                if (wlError) throw wlError;
+                if (wlError) {
+                    console.error('加载单词本失败:', wlError);
+                    throw wlError;
+                }
                 
                 // 加载单词
                 const { data: words, error: wError } = await supabaseClient
                     .from('words')
-                    .select('*')
-                    .order('created_at', { ascending: true });
+                    .select('*');
                 
-                if (wError) throw wError;
+                if (wError) {
+                    console.error('加载单词失败:', wError);
+                    throw wError;
+                }
                 
                 // 加载游戏组别
                 const { data: gameGroups, error: ggError } = await supabaseClient
                     .from('game_groups')
-                    .select('*')
-                    .order('created_at', { ascending: true });
+                    .select('*');
                 
-                if (ggError) throw ggError;
+                if (ggError) {
+                    console.error('加载游戏组别失败:', ggError);
+                    throw ggError;
+                }
                 
                 // 组合数据
                 const cloudData = {
@@ -1002,7 +1021,6 @@
                 return cloudData;
             } catch (error) {
                 console.error('从云端加载数据失败:', error);
-                showToast('云端加载失败，将使用本地数据', 'error');
                 return null;
             }
         }
@@ -1023,8 +1041,7 @@
                     .from('word_lists')
                     .insert({
                         id: wordList.id,
-                        name: wordList.name,
-                        updated_at: new Date().toISOString()
+                        name: wordList.name
                     });
                 
                 if (wlError) throw wlError;
@@ -1078,8 +1095,7 @@
                         word_list_id: gameGroup.wordListId,
                         word_count: gameGroup.wordCount,
                         enable_timer: gameGroup.enableTimer,
-                        advanced_mode: gameGroup.advancedMode,
-                        updated_at: new Date().toISOString()
+                        advanced_mode: gameGroup.advancedMode
                     });
                 
                 if (error) throw error;
@@ -1536,20 +1552,26 @@
             
             try {
                 const cloudData = await loadFromCloud();
-                if (cloudData) {
-                    const { localWordLists, localGameGroups } = convertCloudDataToLocal(cloudData);
-                    
-                    // 更新本地存储
-                    localStorage.setItem('wordLists', JSON.stringify(localWordLists));
-                    localStorage.setItem('gameGroups', JSON.stringify(localGameGroups));
-                    
-                    if (localWordLists.length > 0) {
-                        currentWordList = localWordLists[0];
-                    }
-                    
-                    showToast('数据同步成功！', 'success');
+                
+                if (!cloudData) {
+                    showToast('云端连接失败，请检查网络', 'error');
+                    return;
+                }
+                
+                const { localWordLists, localGameGroups } = convertCloudDataToLocal(cloudData);
+                
+                // 更新本地存储
+                localStorage.setItem('wordLists', JSON.stringify(localWordLists));
+                localStorage.setItem('gameGroups', JSON.stringify(localGameGroups));
+                
+                if (localWordLists.length > 0) {
+                    currentWordList = localWordLists[0];
+                }
+                
+                if (localWordLists.length > 0 || localGameGroups.length > 0) {
+                    showToast(`同步成功！已加载 ${localWordLists.length} 个单词本`, 'success');
                 } else {
-                    showToast('云端暂无数据或同步失败', 'info');
+                    showToast('云端暂无数据', 'info');
                 }
             } catch (error) {
                 console.error('同步失败:', error);

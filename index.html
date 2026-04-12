@@ -1027,54 +1027,54 @@
 
         // 保存单词本到云端
         async function saveWordListToCloud(wordList) {
-            if (!supabaseClient || !isCloudEnabled) return false;
-            
-            try {
-                // 先删除旧的单词本数据（级联删除单词）
-                await supabaseClient
-                    .from('word_lists')
-                    .delete()
-                    .eq('id', wordList.id);
-                
-                // 保存单词本
-                const { error: wlError } = await supabaseClient
-                    .from('word_lists')
-                    .insert({
-                        id: wordList.id,
-                        name: wordList.name
-                    });
-                
-                if (wlError) throw wlError;
-                
-                // 保存单词
-                if (wordList.words && wordList.words.length > 0) {
-                    const wordsData = wordList.words.map(w => ({
-                        id: `w-${wordList.id}-${w.word}`,
-                        word_list_id: wordList.id,
-                        word: w.word,
-                        pos: w.pos,
-                        definition: w.definition,
-                        translation: w.translation,
-                        image_url: w.imageUrl || null,
-                        audio_url: w.audioUrl || null
-                    }));
-                    
-                    const { error: wError } = await supabaseClient
-                        .from('words')
-                        .insert(wordsData);
-                    
-                    if (wError) throw wError;
-                }
-                
-                console.log('单词本已保存到云端');
-                return true;
-            } catch (error) {
-                console.error('保存单词本到云端失败:', error);
-                showToast('云端同步失败', 'error');
-                return false;
-            }
-        }
+  try {
+    console.log("开始保存单词本到云端:", wordList);
 
+    // 1. 保存单词本信息
+    const { error: listError } = await supabaseClient
+      .from("word_lists")
+      .insert([{
+        id: wordList.id,
+        name: wordList.name
+      }]);
+
+    if (listError) {
+      console.error("word_lists 保存失败:", listError);
+      return false;
+    }
+    console.log("word_lists 保存成功");
+
+    // 2. 保存单词（修复：直接使用正确ID，不乱加东西）
+    if (wordList.words && wordList.words.length > 0) {
+      const words = wordList.words.map(w => ({
+        word_list_id: wordList.id,  // 这里修复了！
+        word: w.word || '',
+        pos: w.pos || '',
+        definition: w.definition || '',
+        translation: w.translation || '',
+        image_url: w.imageUrl || '',
+        audio_url: w.audioUrl || ''
+      }));
+
+      console.log("准备保存 words 数据:", words);
+      const { error: wordError } = await supabaseClient
+        .from("words")
+        .insert(words);
+
+      if (wordError) {
+        console.error("保存 words 失败:", wordError);
+        return false;
+      }
+      console.log("words 保存成功");
+    }
+
+    console.log("✅ 保存单词本到云端成功！");
+    return true;
+  } catch (err) {
+    console.error("保存单词本到云端失败:", err);
+    return false;
+  }
+}
         // 保存游戏组别到云端
         async function saveGameGroupToCloud(gameGroup) {
             if (!supabaseClient || !isCloudEnabled) return false;

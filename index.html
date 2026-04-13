@@ -636,6 +636,33 @@
                     <!-- 游戏组别列表将在这里动态生成 -->
                 </div>
             </div>
+            
+            <!-- 分享链接模态框 -->
+            <div id="shareCodeModal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                <div class="bg-white rounded-2xl shadow-2xl p-8 max-w-lg w-full mx-4 animate-bounce-in">
+                    <div class="text-center mb-6">
+                        <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <i class="fa fa-link text-3xl text-green-500"></i>
+                        </div>
+                        <h3 class="text-2xl font-bold gradient-text mb-2">分享链接已生成</h3>
+                        <p class="text-gray-500">复制链接发给学生，他们打开链接即可获取单词本</p>
+                    </div>
+                    
+                    <div class="bg-gradient-to-r from-blue-50 to-pink-50 rounded-xl p-4 mb-6">
+                        <p class="text-sm text-gray-500 mb-1">单词本：<span id="shareWordListName" class="font-medium text-gray-700"></span></p>
+                        <div class="bg-white rounded-lg p-3 mt-2 break-all text-sm text-gray-700 max-h-24 overflow-y-auto" id="shareCodeText"></div>
+                    </div>
+                    
+                    <div class="flex space-x-4">
+                        <button onclick="copyShareCode()" class="flex-1 gradient-bg text-white px-6 py-3 rounded-xl hover:shadow-lg transition-all duration-300 font-medium">
+                            <i class="fa fa-copy mr-2"></i>复制链接
+                        </button>
+                        <button onclick="hideShareCodeModal()" class="flex-1 bg-gray-300 text-gray-700 px-6 py-3 rounded-xl hover:bg-gray-400 transition-colors font-medium">
+                            关闭
+                        </button>
+                    </div>
+                </div>
+            </div>
         </section>
 
         <!-- 学生学习页 -->
@@ -643,6 +670,24 @@
             <div class="text-center mb-10 animate-fade-in">
                 <h2 class="text-3xl font-bold gradient-text mb-3">学生学习中心</h2>
                 <p class="text-gray-600">选择下面的学习模块开始学习英语单词</p>
+            </div>
+            
+            <!-- 导入分享码 -->
+            <div class="max-w-xl mx-auto mb-10">
+                <div class="bg-gradient-to-r from-green-50 to-blue-50 rounded-2xl p-6 border border-green-200">
+                    <h3 class="text-lg font-bold text-gray-800 mb-3 flex items-center">
+                        <i class="fa fa-download mr-2 text-green-500"></i>导入分享码
+                    </h3>
+                    <div class="flex space-x-3">
+                        <input type="text" id="importShareCode" class="flex-1 px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-green-500" placeholder="请输入老师分享的分享码">
+                        <button id="btnImportShareCode" class="bg-gradient-to-r from-green-500 to-green-600 text-white px-6 py-3 rounded-xl hover:shadow-lg transition-all duration-300 font-medium">
+                            导入
+                        </button>
+                    </div>
+                    <p class="text-sm text-gray-500 mt-2">
+                        <i class="fa fa-info-circle mr-1"></i>输入老师分享的分享码，即可获取单词本
+                    </p>
+                </div>
             </div>
             
             <div class="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
@@ -947,27 +992,176 @@
         
         // 初始化 Supabase
         function initSupabase() {
-            // Supabase SDK v2 CDN 版本挂载在 window.supabase 或全局 supabase
             const sdk = typeof window.supabase !== 'undefined' 
                 ? window.supabase 
                 : (typeof supabase !== 'undefined' ? supabase : null);
             
-            console.log('Supabase SDK 状态:', {
-                hasWindowSupabase: typeof window.supabase !== 'undefined',
-                hasGlobalSupabase: typeof supabase !== 'undefined',
-                sdkType: sdk ? typeof sdk : 'null'
-            });
-            
             if (sdk && typeof sdk.createClient === 'function') {
                 supabaseClient = sdk.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-                console.log('Supabase 客户端已初始化，云同步已启用');
-                console.log('项目 URL:', SUPABASE_URL);
+                console.log('Supabase 客户端已初始化');
                 return true;
             }
             console.warn('Supabase SDK 未加载，将使用本地存储');
-            console.warn('请检查网络连接或 Supabase CDN 是否可用');
             isCloudEnabled = false;
             return false;
+        }
+        
+        // ========== 分享码功能（URL 参数方式）==========
+        
+        // 生成分享链接
+        function generateShareLink(wordList) {
+            try {
+                // 准备分享数据
+                const shareData = {
+                    name: wordList.name,
+                    words: wordList.words || [],
+                    v: 1  // 版本号，用于未来兼容性
+                };
+                
+                // 编码为 Base64
+                const jsonStr = JSON.stringify(shareData);
+                const encoded = btoa(unescape(encodeURIComponent(jsonStr)));
+                
+                // 获取当前页面 URL
+                const currentUrl = window.location.href.split('?')[0];
+                const shareLink = `${currentUrl}?share=${encoded}`;
+                
+                console.log('分享链接生成成功，长度:', shareLink.length);
+                return shareLink;
+            } catch (error) {
+                console.error('生成分享链接失败:', error);
+                throw new Error('数据过大，无法生成分享链接');
+            }
+        }
+        
+        // 通过分享链接获取单词本
+        function getWordListFromUrl() {
+            const params = new URLSearchParams(window.location.search);
+            const shareData = params.get('share');
+            
+            if (!shareData) return null;
+            
+            try {
+                const jsonStr = decodeURIComponent(escape(atob(shareData)));
+                const data = JSON.parse(jsonStr);
+                
+                return {
+                    id: 'shared-' + Date.now(),
+                    name: data.name,
+                    words: data.words || [],
+                    isShared: true
+                };
+            } catch (error) {
+                console.error('解析分享链接失败:', error);
+                return null;
+            }
+        }
+        
+        // 复制分享链接
+        function copyShareLink(shareLink) {
+            navigator.clipboard.writeText(shareLink).then(() => {
+                showToast('分享链接已复制到剪贴板！', 'success');
+            }).catch(() => {
+                // 降级方案
+                const input = document.createElement('input');
+                input.value = shareLink;
+                document.body.appendChild(input);
+                input.select();
+                document.execCommand('copy');
+                document.body.removeChild(input);
+                showToast('分享链接已复制到剪贴板！', 'success');
+            });
+        }
+        
+        // 处理导入分享码/链接
+        async function handleImportShareCode() {
+            const input = document.getElementById('importShareCode').value.trim();
+            
+            if (!input) {
+                showToast('请输入分享码或链接', 'error');
+                return;
+            }
+            
+            const btn = document.getElementById('btnImportShareCode');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa fa-spinner fa-spin mr-2"></i>导入中...';
+            
+            try {
+                let wordList = null;
+                
+                // 判断是分享链接还是分享码
+                if (input.includes('?share=')) {
+                    // 是分享链接
+                    const params = new URLSearchParams(input.split('?')[1]);
+                    const shareData = params.get('share');
+                    if (shareData) {
+                        wordList = getWordListFromString(shareData);
+                    }
+                } else if (input.includes('share=')) {
+                    // 是分享码格式
+                    const params = new URLSearchParams(input);
+                    const shareData = params.get('share');
+                    if (shareData) {
+                        wordList = getWordListFromString(shareData);
+                    }
+                } else {
+                    // 尝试直接解码（可能是纯 base64 字符串）
+                    try {
+                        wordList = getWordListFromString(input);
+                    } catch (e) {
+                        // 忽略
+                    }
+                }
+                
+                if (!wordList) {
+                    throw new Error('分享码格式不正确或已失效');
+                }
+                
+                // 保存到本地
+                let wordLists = JSON.parse(localStorage.getItem('wordLists')) || [];
+                
+                // 检查是否已存在同名单词本
+                const existingIndex = wordLists.findIndex(wl => wl.name === wordList.name);
+                if (existingIndex !== -1) {
+                    wordLists[existingIndex] = wordList;
+                    showToast('单词本已更新', 'success');
+                } else {
+                    wordLists.push(wordList);
+                    showToast('单词本导入成功！', 'success');
+                }
+                
+                localStorage.setItem('wordLists', JSON.stringify(wordLists));
+                currentWordList = wordList;
+                
+                // 清空输入框
+                document.getElementById('importShareCode').value = '';
+                
+                // 提示用户可以开始学习了
+                showToast(`已导入 "${wordList.name}"，共 ${wordList.words.length} 个单词`, 'success');
+                
+            } catch (error) {
+                showToast('导入失败: ' + (error.message || '分享码无效或已过期'), 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '导入';
+            }
+        }
+        
+        // 从字符串解析单词本
+        function getWordListFromString(encoded) {
+            try {
+                const jsonStr = decodeURIComponent(escape(atob(encoded)));
+                const data = JSON.parse(jsonStr);
+                
+                return {
+                    id: 'shared-' + Date.now(),
+                    name: data.name,
+                    words: data.words || [],
+                    isShared: true
+                };
+            } catch (error) {
+                throw new Error('分享码解析失败');
+            }
         }
 
         // 从云端加载数据
@@ -1027,54 +1221,65 @@
 
         // 保存单词本到云端
         async function saveWordListToCloud(wordList) {
-  try {
-    console.log("开始保存单词本到云端:", wordList);
+            if (!supabaseClient || !isCloudEnabled) return false;
+            
+            try {
+                console.log('开始保存单词本到云端:', wordList);
+                
+                // 先删除旧的单词本数据（级联删除单词）
+                await supabaseClient
+                    .from('word_lists')
+                    .delete()
+                    .eq('id', wordList.id);
+                
+                // 保存单词本
+                const { error: wlError } = await supabaseClient
+                    .from('word_lists')
+                    .insert({
+                        id: wordList.id,
+                        name: wordList.name
+                    });
+                
+                if (wlError) {
+                    console.error('保存 word_lists 失败:', wlError);
+                    throw wlError;
+                }
+                console.log('word_lists 保存成功');
+                
+                // 保存单词
+                if (wordList.words && wordList.words.length > 0) {
+                    const wordsData = wordList.words.map(w => ({
+                        id: `w-${wordList.id}-${w.word || Math.random().toString(36)}`,
+                        word_list_id: wordList.id,
+                        word: w.word || '',
+                        pos: w.pos || '',
+                        definition: w.definition || '',
+                        translation: w.translation || '',
+                        image_url: w.imageUrl || null,
+                        audio_url: w.audioUrl || null
+                    }));
+                    console.log('准备保存 words 数据:', wordsData);
+                    
+                    const { error: wError } = await supabaseClient
+                        .from('words')
+                        .insert(wordsData);
+                    
+                    if (wError) {
+                        console.error('保存 words 失败:', wError);
+                        throw wError;
+                    }
+                    console.log('words 保存成功，共', wordsData.length, '条');
+                }
+                
+                console.log('单词本已保存到云端');
+                return true;
+            } catch (error) {
+                console.error('保存单词本到云端失败:', error);
+                showToast('云端同步失败: ' + (error.message || error.code || '未知错误'), 'error');
+                return false;
+            }
+        }
 
-    // 1. 保存单词本信息
-    const { error: listError } = await supabaseClient
-      .from("word_lists")
-      .insert([{
-        id: wordList.id,
-        name: wordList.name
-      }]);
-
-    if (listError) {
-      console.error("word_lists 保存失败:", listError);
-      return false;
-    }
-    console.log("word_lists 保存成功");
-
-    // 2. 保存单词（修复：直接使用正确ID，不乱加东西）
-    if (wordList.words && wordList.words.length > 0) {
-      const words = wordList.words.map(w => ({
-        word_list_id: wordList.id,  // 这里修复了！
-        word: w.word || '',
-        pos: w.pos || '',
-        definition: w.definition || '',
-        translation: w.translation || '',
-        image_url: w.imageUrl || '',
-        audio_url: w.audioUrl || ''
-      }));
-
-      console.log("准备保存 words 数据:", words);
-      const { error: wordError } = await supabaseClient
-        .from("words")
-        .insert(words);
-
-      if (wordError) {
-        console.error("保存 words 失败:", wordError);
-        return false;
-      }
-      console.log("words 保存成功");
-    }
-
-    console.log("✅ 保存单词本到云端成功！");
-    return true;
-  } catch (err) {
-    console.error("保存单词本到云端失败:", err);
-    return false;
-  }
-}
         // 保存游戏组别到云端
         async function saveGameGroupToCloud(gameGroup) {
             if (!supabaseClient || !isCloudEnabled) return false;
@@ -1302,19 +1507,51 @@
 
         // DOM 加载完成后执行
         document.addEventListener('DOMContentLoaded', function() {
+            console.log('页面开始初始化...');
+            
             // 初始化 Supabase
             initSupabase();
             
-            // 初始化数据（尝试从云端加载）
+            // 初始化数据
             initializeData().then(() => {
+                console.log('数据初始化完成');
                 bindEvents();
                 showPage('homePage');
+                
+                // 检查是否有分享链接
+                const sharedWordList = getWordListFromUrl();
+                if (sharedWordList) {
+                    handleSharedWordList(sharedWordList);
+                }
             }).catch(err => {
                 console.error('初始化失败:', err);
                 bindEvents();
                 showPage('homePage');
             });
         });
+        
+        // 处理分享的单词本
+        function handleSharedWordList(wordList) {
+            // 保存到本地
+            let wordLists = JSON.parse(localStorage.getItem('wordLists')) || [];
+            
+            // 检查是否已存在同名单词本
+            const existingIndex = wordLists.findIndex(wl => wl.name === wordList.name);
+            if (existingIndex !== -1) {
+                wordLists[existingIndex] = wordList;
+            } else {
+                wordLists.push(wordList);
+            }
+            
+            localStorage.setItem('wordLists', JSON.stringify(wordLists));
+            currentWordList = wordList;
+            
+            // 显示提示
+            showToast(`已自动导入分享的单词本 "${wordList.name}"，共 ${wordList.words.length} 个单词`, 'success');
+            
+            // 清除 URL 参数
+            window.history.replaceState({}, document.title, window.location.pathname);
+        }
 
         // 初始化数据（尝试从云端加载）
         async function initializeData() {
@@ -1391,6 +1628,12 @@
             // 首页按钮
             document.getElementById('enterTeacher').addEventListener('click', () => showPage('teacherLoginPage'));
             document.getElementById('enterStudent').addEventListener('click', () => showPage('studentPage'));
+            
+            // 导入分享码
+            document.getElementById('btnImportShareCode').addEventListener('click', handleImportShareCode);
+            document.getElementById('importShareCode').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') handleImportShareCode();
+            });
             
             // 教师登录
             document.getElementById('teacherLoginForm').addEventListener('submit', handleTeacherLogin);
@@ -1750,56 +1993,90 @@
             }
         }
 
-        // 上传图片
+        // 上传图片到云存储
         function uploadImage(word) {
             const input = document.createElement('input');
             input.type = 'file';
             input.accept = 'image/*';
             
-            input.onchange = function(e) {
+            input.onchange = async function(e) {
                 const file = e.target.files[0];
                 if (!file) return;
                 
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    const tempData = JSON.parse(localStorage.getItem('tempWordList')) || [];
-                    const wordIndex = tempData.findIndex(w => w.word === word);
+                try {
+                    const formData = new FormData();
+                    formData.append('file', file);
                     
-                    if (wordIndex !== -1) {
-                        tempData[wordIndex].imageUrl = e.target.result;
-                        localStorage.setItem('tempWordList', JSON.stringify(tempData));
-                        showWordListPreview(tempData);
-                        showToast('图片上传成功！', 'success');
+                    showToast('图片上传中...', 'info');
+                    
+                    const response = await fetch('/api/upload/image', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        const tempData = JSON.parse(localStorage.getItem('tempWordList')) || [];
+                        const wordIndex = tempData.findIndex(w => w.word === word);
+                        
+                        if (wordIndex !== -1) {
+                            tempData[wordIndex].imageUrl = result.url;
+                            localStorage.setItem('tempWordList', JSON.stringify(tempData));
+                            showWordListPreview(tempData);
+                            showToast('图片上传成功！', 'success');
+                        }
+                    } else {
+                        showToast('图片上传失败: ' + result.error, 'error');
                     }
-                };
-                reader.readAsDataURL(file);
+                } catch (error) {
+                    console.error('图片上传错误:', error);
+                    showToast('图片上传失败', 'error');
+                }
             };
             input.click();
         }
 
-        // 上传音频
+        // 上传音频到云存储
         function uploadAudio(word) {
             const input = document.createElement('input');
             input.type = 'file';
-            input.accept = 'audio/mp3';
+            input.accept = 'audio/*';
             
-            input.onchange = function(e) {
+            input.onchange = async function(e) {
                 const file = e.target.files[0];
                 if (!file) return;
                 
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    const tempData = JSON.parse(localStorage.getItem('tempWordList')) || [];
-                    const wordIndex = tempData.findIndex(w => w.word === word);
+                try {
+                    const formData = new FormData();
+                    formData.append('file', file);
                     
-                    if (wordIndex !== -1) {
-                        tempData[wordIndex].audioUrl = e.target.result;
-                        localStorage.setItem('tempWordList', JSON.stringify(tempData));
-                        showWordListPreview(tempData);
-                        showToast('音频上传成功！', 'success');
+                    showToast('音频上传中...', 'info');
+                    
+                    const response = await fetch('/api/upload/audio', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        const tempData = JSON.parse(localStorage.getItem('tempWordList')) || [];
+                        const wordIndex = tempData.findIndex(w => w.word === word);
+                        
+                        if (wordIndex !== -1) {
+                            tempData[wordIndex].audioUrl = result.url;
+                            localStorage.setItem('tempWordList', JSON.stringify(tempData));
+                            showWordListPreview(tempData);
+                            showToast('音频上传成功！', 'success');
+                        }
+                    } else {
+                        showToast('音频上传失败: ' + result.error, 'error');
                     }
-                };
-                reader.readAsDataURL(file);
+                } catch (error) {
+                    console.error('音频上传错误:', error);
+                    showToast('音频上传失败', 'error');
+                }
             };
             input.click();
         }
@@ -1819,7 +2096,10 @@
                             <div class="flex justify-between items-center mb-2">
                                 <h4 class="font-bold text-lg text-gray-800">${wordList.name}</h4>
                                 <div>
-                                    <button class="text-blue-500 hover:text-blue-700 mr-3 edit-word-list" data-id="${wordList.id}">
+                                    <button class="text-green-500 hover:text-green-700 mr-2 share-word-list" data-id="${wordList.id}" title="生成分享码">
+                                        <i class="fa fa-share-alt"></i>
+                                    </button>
+                                    <button class="text-blue-500 hover:text-blue-700 mr-2 edit-word-list" data-id="${wordList.id}">
                                         <i class="fa fa-pencil"></i>
                                     </button>
                                     <button class="text-red-500 hover:text-red-700 delete-word-list" data-id="${wordList.id}">
@@ -1838,6 +2118,14 @@
             container.innerHTML = html;
             document.getElementById('wordListManagement').classList.remove('hidden');
             
+            // 分享按钮事件
+            document.querySelectorAll('.share-word-list').forEach(button => {
+                button.addEventListener('click', function() {
+                    const id = this.getAttribute('data-id');
+                    handleShareWordList(id);
+                });
+            });
+            
             document.querySelectorAll('.edit-word-list').forEach(button => {
                 button.addEventListener('click', function() {
                     const id = this.getAttribute('data-id');
@@ -1851,6 +2139,52 @@
                     deleteWordList(id);
                 });
             });
+        }
+        
+        // 处理分享单词本
+        function handleShareWordList(id) {
+            const wordLists = JSON.parse(localStorage.getItem('wordLists')) || [];
+            const wordList = wordLists.find(wl => wl.id === id);
+            if (!wordList) {
+                showToast('单词本不存在', 'error');
+                return;
+            }
+            
+            try {
+                const shareLink = generateShareLink(wordList);
+                showShareLinkModal(shareLink, wordList.name);
+            } catch (error) {
+                showToast('生成分享链接失败: ' + (error.message || '数据过大'), 'error');
+            }
+        }
+        
+        // 显示分享链接模态框
+        function showShareLinkModal(shareLink, wordListName) {
+            document.getElementById('shareCodeText').textContent = shareLink;
+            document.getElementById('shareWordListName').textContent = wordListName;
+            document.getElementById('shareCodeModal').classList.remove('hidden');
+        }
+        
+        // 复制分享链接
+        function copyShareCode() {
+            const shareLink = document.getElementById('shareCodeText').textContent;
+            navigator.clipboard.writeText(shareCode).then(() => {
+                showToast('分享码已复制到剪贴板！', 'success');
+            }).catch(() => {
+                // 降级方案
+                const input = document.createElement('input');
+                input.value = shareCode;
+                document.body.appendChild(input);
+                input.select();
+                document.execCommand('copy');
+                document.body.removeChild(input);
+                showToast('分享码已复制到剪贴板！', 'success');
+            });
+        }
+        
+        // 隐藏分享码模态框
+        function hideShareCodeModal() {
+            document.getElementById('shareCodeModal').classList.add('hidden');
         }
 
         // 隐藏单词本管理
@@ -1962,20 +2296,38 @@
             input.type = 'file';
             input.accept = 'image/*';
             
-            input.onchange = function(e) {
+            input.onchange = async function(e) {
                 const file = e.target.files[0];
                 if (!file) return;
                 
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    const imageUrlInput = document.querySelectorAll('.image-url-input')[index];
-                    if (imageUrlInput) {
-                        imageUrlInput.value = e.target.result;
-                        const button = document.querySelectorAll('.edit-image')[index];
-                        if (button) button.innerHTML = '<i class="fa fa-image mr-1"></i> 更换图片';
+                try {
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    
+                    showToast('图片上传中...', 'info');
+                    
+                    const response = await fetch('/api/upload/image', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        const imageUrlInput = document.querySelectorAll('.image-url-input')[index];
+                        if (imageUrlInput) {
+                            imageUrlInput.value = result.url;
+                            const button = document.querySelectorAll('.edit-image')[index];
+                            if (button) button.innerHTML = '<i class="fa fa-image mr-1"></i> 更换图片';
+                        }
+                        showToast('图片上传成功！', 'success');
+                    } else {
+                        showToast('图片上传失败: ' + result.error, 'error');
                     }
-                };
-                reader.readAsDataURL(file);
+                } catch (error) {
+                    console.error('图片上传错误:', error);
+                    showToast('图片上传失败', 'error');
+                }
             };
             input.click();
         }
@@ -1984,22 +2336,40 @@
         function editWordAudio(index) {
             const input = document.createElement('input');
             input.type = 'file';
-            input.accept = 'audio/mp3';
+            input.accept = 'audio/*';
             
-            input.onchange = function(e) {
+            input.onchange = async function(e) {
                 const file = e.target.files[0];
                 if (!file) return;
                 
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    const audioUrlInput = document.querySelectorAll('.audio-url-input')[index];
-                    if (audioUrlInput) {
-                        audioUrlInput.value = e.target.result;
-                        const button = document.querySelectorAll('.edit-audio')[index];
-                        if (button) button.innerHTML = '<i class="fa fa-volume-up mr-1"></i> 更换音频';
+                try {
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    
+                    showToast('音频上传中...', 'info');
+                    
+                    const response = await fetch('/api/upload/audio', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        const audioUrlInput = document.querySelectorAll('.audio-url-input')[index];
+                        if (audioUrlInput) {
+                            audioUrlInput.value = result.url;
+                            const button = document.querySelectorAll('.edit-audio')[index];
+                            if (button) button.innerHTML = '<i class="fa fa-volume-up mr-1"></i> 更换音频';
+                        }
+                        showToast('音频上传成功！', 'success');
+                    } else {
+                        showToast('音频上传失败: ' + result.error, 'error');
                     }
-                };
-                reader.readAsDataURL(file);
+                } catch (error) {
+                    console.error('音频上传错误:', error);
+                    showToast('音频上传失败', 'error');
+                }
             };
             input.click();
         }
@@ -2095,7 +2465,8 @@
                 const imageUrl = form.querySelector('.image-url-input').value;
                 const audioUrl = form.querySelector('.audio-url-input').value;
                 
-                if (word && pos && definition && translation) {
+                // 单词是必填项，其他字段可选
+                if (word) {
                     words.push({ word, pos, definition, translation, imageUrl, audioUrl });
                 }
             });
